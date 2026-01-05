@@ -1,0 +1,22 @@
+/* === STYLES EXISTANTS ... === */
+
+.boost-badge {
+    position: absolute;
+    top: 20px;
+    left: -5px;
+    background: #ffea00;
+    color: #000;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 900;
+    border: 1px solid #000;
+    z-index: 5;
+    box-shadow: 0 0 10px rgba(255, 234, 0, 0.5);
+    transform: rotate(-10deg);
+}
+/* ... */

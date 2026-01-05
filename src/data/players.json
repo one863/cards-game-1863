@@ -1,0 +1,33 @@
+[
+  { "id": 1, "name": "Z. Zidane", "pos": "CAM", "vaep": 8, "cost": 4, "country": "France", "effects": ["VISION", "PASSEUR"] },
+  { "id": 2, "name": "L. Messi", "pos": "RW", "vaep": 8, "cost": 4, "country": "Argentine", "effects": ["PROVOCATEUR", "TECHNIQUE"] },
+  { "id": 3, "name": "Pelé", "pos": "ST", "vaep": 8, "cost": 4, "country": "Brésil", "effects": ["FINISSEUR", "AERIEN"] },
+  { "id": 4, "name": "Johan Cruyff", "pos": "CAM", "vaep": 8, "cost": 4, "country": "Pays-Bas", "effects": ["PROVOCATEUR", "VISION"] },
+  { "id": 5, "name": "Franz Beckenbauer", "pos": "CB", "vaep": 8, "cost": 4, "country": "Allemagne", "effects": ["VISION", "SOLIDAIRE"] },
+  { "id": 6, "name": "Diego Maradona", "pos": "CAM", "vaep": 8, "cost": 4, "country": "Argentine", "effects": ["PROVOCATEUR", "TECHNIQUE"] },
+  { "id": 7, "name": "Paolo Maldini", "pos": "CB", "vaep": 8, "cost": 4, "country": "Italie", "effects": ["AGRESSIF", "PHYSIQUE"] },
+  { "id": 8, "name": "Lev Yachine", "pos": "GK", "vaep": 8, "cost": 4, "country": "Russie", "effects": ["PHYSIQUE", "SOLIDAIRE"] },
+  
+  { "id": 9, "name": "N. Kanté", "pos": "CDM", "vaep": 7, "cost": 4, "country": "France", "effects": ["BOOST2", "VOLUME"] },
+  { "id": 10, "name": "Casemiro", "pos": "CDM", "vaep": 7, "cost": 4, "country": "Brésil", "effects": ["BOOST1", "PHYSIQUE"] },
+  { "id": 11, "name": "G. Gattuso", "pos": "CDM", "vaep": 6, "cost": 4, "country": "Italie", "effects": ["BOOST2", "AGRESSIF"] },
+  { "id": 12, "name": "J. Kimmich", "pos": "CDM", "vaep": 7, "cost": 4, "country": "Allemagne", "effects": ["BOOST1", "PASSEUR"] },
+  { "id": 13, "name": "C. Makelele", "pos": "CDM", "vaep": 7, "cost": 4, "country": "France", "effects": ["BOOST2", "SOLIDAIRE"] },
+  
+  { "id": 14, "name": "K. De Bruyne", "pos": "CM", "vaep": 7, "cost": 4, "country": "Belgique", "effects": ["PASSEUR", "VISION"] },
+  { "id": 15, "name": "Mohamed Salah", "pos": "RW", "vaep": 7, "cost": 4, "country": "Egypte", "effects": ["VITESSE", "TIRLOINTAIN"] },
+  { "id": 16, "name": "Virgil Van Dijk", "pos": "CB", "vaep": 7, "cost": 4, "country": "Pays-Bas", "effects": ["AERIEN", "AGRESSIF"] },
+  { "id": 17, "name": "Alphonso Davies", "pos": "LB", "vaep": 6, "cost": 4, "country": "Canada", "effects": ["VITESSE", "PROVOCATEUR"] },
+  { "id": 18, "name": "Heung-min Son", "pos": "LW", "vaep": 7, "cost": 4, "country": "Corée du Sud", "effects": ["TIRLOINTAIN", "FINISSEUR"] },
+  
+  { "id": 19, "name": "Patrick Vieira", "pos": "CDM", "vaep": 7, "cost": 4, "country": "France", "effects": ["BOOST1", "AGRESSIF"] },
+  { "id": 20, "name": "J. Mascherano", "pos": "CDM", "vaep": 6, "cost": 4, "country": "Argentine", "effects": ["BOOST2", "PHYSIQUE"] },
+  { "id": 21, "name": "D. Rice", "pos": "CDM", "vaep": 7, "cost": 4, "country": "Angleterre", "effects": ["BOOST1", "SOLIDAIRE"] },
+  { "id": 22, "name": "Busquets", "pos": "CDM", "vaep": 7, "cost": 4, "country": "Espagne", "effects": ["BOOST1", "VISION"] },
+  
+  { "id": 23, "name": "Vinicius Jr", "pos": "LW", "vaep": 7, "cost": 4, "country": "Brésil", "effects": ["PROVOCATEUR", "VITESSE"] },
+  { "id": 24, "name": "K. Mbappé", "pos": "ST", "vaep": 8, "cost": 4, "country": "France", "effects": ["VITESSE", "FINISSEUR"] },
+  { "id": 25, "name": "E. Haaland", "pos": "ST", "vaep": 8, "cost": 4, "country": "Norvège", "effects": ["FINISSEUR", "PHYSIQUE"] },
+  { "id": 26, "name": "Rodri", "pos": "CDM", "vaep": 8, "cost": 4, "country": "Espagne", "effects": ["BOOST1", "VISION"] },
+  { "id": 27, "name": "M. Maignan", "pos": "GK", "vaep": 7, "cost": 4, "country": "France", "effects": ["BOOST1", "PHYSIQUE"] }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "bronze_pack",
+    "name": "Pack Amateur",
+    "cost": 100,
+    "cardCount": 3,
+    "guaranteed": "MIN_60",
+    "dropRates": {
+      "min_50": 0.6,
+      "min_70": 0.3,
+      "min_80": 0.09,
+      "min_90": 0.01
+    },
+    "color": "#cd7f32"
+  },
+  {
+    "id": "silver_pack",
+    "name": "Pack Pro",
+    "cost": 250,
+    "cardCount": 4,
+    "guaranteed": "MIN_70",
+    "dropRates": {
+      "min_50": 0.3,
+      "min_70": 0.5,
+      "min_80": 0.15,
+      "min_90": 0.05
+    },
+    "color": "#c0c0c0"
+  },
+  {
+    "id": "gold_pack",
+    "name": "Pack Elite",
+    "cost": 500,
+    "cardCount": 5,
+    "guaranteed": "MIN_80",
+    "dropRates": {
+      "min_50": 0.1,
+      "min_70": 0.4,
+      "min_80": 0.4,
+      "min_90": 0.1
+    },
+    "color": "#ffd700"
+  }
+]
