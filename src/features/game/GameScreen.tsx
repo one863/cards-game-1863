@@ -13,7 +13,7 @@ import { Player } from '../../types';
 import { GAME_RULES } from '../../core/rules/settings';
 import { 
     MdMenuBook, MdExitToApp, MdLayers, MdDeleteSweep, MdFlashOn, MdShield, 
-    MdArrowUpward, MdMic, MdReplay, MdAssessment, MdClose // <--- AJOUT ICI
+    MdArrowUpward, MdMic, MdReplay, MdAssessment, MdClose
 } from 'react-icons/md';
 
 import LogsModal from './components/LogsModal';
@@ -32,7 +32,7 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showResultOverlay, setShowResultOverlay] = useState(false);
-  const [showQuitConfirm, setShowQuitConfirm] = useState(false); // Note: showQuitConfirm est défini mais pas utilisé dans le JSX fourni, je l'ai laissé tel quel.
+  const [showQuitConfirm, setShowQuitConfirm] = useState(false); 
   const [logsCopied, setLogsCopied] = useState(false);
   
   const [inspectedCard, setInspectedCard] = useState<{ 
@@ -44,14 +44,13 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
 
   useAI();
 
-  // Définition de isMeneurTurn (C'était l'erreur principale)
-  const isMeneurTurn = gameState?.turn === 'player';
+  const isPlayerTurn = gameState?.turn === 'player';
+  const mustBlock = gameState?.phase === 'ATTACK_DECLARED' && gameState?.turn === 'player';
+  const attackerCard = mustBlock ? gameState?.opponent.field.find(c => c.instanceId === gameState.attackerInstanceId) : null;
 
-  // Gestion de la fin de partie avec un petit délai pour laisser l'animation de but se faire si nécessaire
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     if (gameState?.winner) {
-        // On attend 2 secondes avant d'afficher l'écran de victoire/défaite pour voir le dernier but
         timer = setTimeout(() => setShowResultOverlay(true), 1500);
     }
     return () => clearTimeout(timer);
@@ -161,7 +160,6 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
       if (zone === 'hand' && phase === 'MAIN' && turn === 'player') actions.push({ type: 'PLAY', label: t('game.play') || 'JOUER', icon: <MdArrowUpward /> });
       if (zone === 'field' && phase === 'MAIN' && turn === 'player' && !card.hasActed && !card.isFlipped) actions.push({ type: 'ATTACK', label: t('game.attack') || 'ATTAQUER', icon: <MdArrowUpward /> });
       
-      // LOGIQUE DE BLOCAGE (Conservée comme demandé)
       if (zone === 'field' && phase === 'ATTACK_DECLARED' && turn === 'player' && !card.isFlipped) {
           actions.push({ type: 'BLOCK', label: t('game.block') || 'BLOQUER', icon: <MdShield /> });
       }
@@ -225,14 +223,14 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
   const commentaryBox = useMemo(() => {
     if (!gameState?.log || gameState.log.length === 0) return null;
     const lastLog = gameState.log[0];
-    const isPlayerTurn = gameState.turn === 'player';
-    const turnColor = isPlayerTurn ? 'border-[#afff34]/40' : 'border-red-500/40';
+    const isTurnPlayer = gameState.turn === 'player';
+    const turnColor = isTurnPlayer ? 'border-[#afff34]/40' : 'border-red-500/40';
     return (
         <motion.div key={lastLog.id} initial={{ y: 20, opacity: 0, scale: 0.9 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -20, opacity: 0 }} className={`bg-black/90 px-8 py-3 rounded-2xl border-2 ${turnColor} backdrop-blur-2xl text-center flex items-center gap-4 max-w-[95%] relative overflow-hidden shadow-2xl`}>
-            <MdMic className={isPlayerTurn ? 'text-[#afff34] animate-pulse' : 'text-red-500 animate-pulse'} size={24} />
+            <MdMic className={isTurnPlayer ? 'text-[#afff34] animate-pulse' : 'text-red-500 animate-pulse'} size={24} />
             <div className="flex flex-col items-center min-w-[200px]">
                 <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] ${isPlayerTurn ? 'text-[#afff34]' : 'text-red-500'}`}>{t('game.live')} • {isPlayerTurn ? t('selection.you') : t('selection.opponent')}</span>
+                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] ${isTurnPlayer ? 'text-[#afff34]' : 'text-red-500'}`}>{t('game.live')} • {isTurnPlayer ? t('selection.you') : t('selection.opponent')}</span>
                 </div>
                 <div className="text-xs md:text-sm text-white/90 leading-tight">{formatLogText(lastLog.key, lastLog.params)}</div>
             </div>
@@ -245,13 +243,20 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
       <ExplosionAnimation active={!!gameState.explosionEvent?.active} onComplete={clearExplosion} />
       <BoostAnimation active={!!gameState.boostEvent?.active} val={gameState.boostEvent?.val || 0} side={gameState.boostEvent?.side || 'player'} onComplete={clearBoost} />
 
-      {/* 1. HUD ADVERSAIRE */}
+      {mustBlock && (
+        <motion.div initial={{ y: -100 }} animate={{ y: 0 }} className="absolute top-12 left-0 right-0 z-[100] bg-red-600 text-white py-2 text-center font-black uppercase tracking-widest shadow-2xl flex flex-col items-center justify-center border-b border-white/20">
+           <div className="flex items-center gap-4">
+              <MdShield size={24} className="animate-pulse" />
+              {t('game.must_block') || 'À VOUS DE BLOQUER !'}
+              <div className="text-[10px] bg-black/20 px-2 py-0.5 rounded">{attackerCard?.name} ATTAQUE</div>
+           </div>
+           <div className="text-[9px] opacity-70 mt-1">{t('game.select_blocker_instruction')}</div>
+        </motion.div>
+      )}
+
       {renderHUD('opponent')}
 
-      {/* --- ZONE DE MATCH --- */}
       <div className="flex-1 relative flex flex-col overflow-hidden">
-        
-        {/* Arrière-plan terrain */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#2a6d41] via-[#3a8d56] to-[#2a6d41] z-0">
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/grass.png')] opacity-30 contrast-125"></div>
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-white/20"></div>
@@ -259,7 +264,6 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/30 rounded-full"></div>
         </div>
 
-        {/* 2. MAIN ADVERSAIRE */}
         <div className="h-32 shrink-0 flex justify-center items-center px-8 relative z-40">
             <div className="flex gap-2 justify-center items-center w-full">
                 {gameState.opponent.hand.map((_, i) => (
@@ -270,26 +274,22 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
             </div>
         </div>
 
-        {/* 3. TERRAIN ADVERSAIRE */}
         <div className="flex-1 flex items-center justify-center px-6 relative z-10">
             <div className="w-full flex justify-center gap-3">
                 {Array.from({ length: GAME_RULES.FIELD_SIZE }).map((_, i) => renderFieldSlot('opponent', i))}
             </div>
         </div>
 
-        {/* 4. CENTRE */}
         <div className="h-20 shrink-0 flex items-center justify-center px-4 relative z-20">
              <AnimatePresence mode="wait">{commentaryBox}</AnimatePresence>
         </div>
 
-        {/* 5. TERRAIN JOUEUR */}
         <div className="flex-1 flex items-center justify-center px-6 relative z-10">
             <div className="w-full flex justify-center gap-3">
                 {Array.from({ length: GAME_RULES.FIELD_SIZE }).map((_, i) => renderFieldSlot('player', i))}
             </div>
         </div>
 
-        {/* 6. MAIN JOUEUR */}
         <div className="h-32 shrink-0 flex justify-center items-center px-8 relative z-40">
             <div className="flex gap-2 justify-center items-end w-full">
                 <AnimatePresence>
@@ -304,20 +304,17 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
 
       </div>
 
-      {/* 7. HUD JOUEUR */}
       {renderHUD('player')}
 
-      {/* 8. NAVIGATION BASSE */}
       <div className="h-14 bg-[#0a0a0a] border-t border-white/10 flex justify-between items-center px-10 shrink-0 relative z-[60]">
           <div className="flex gap-8">
               <button onClick={() => setShowLogModal(true)} className="text-white/40 hover:text-white transition-colors p-2"><MdMenuBook size={24} /></button>
               <button onClick={() => setShowStatsModal(true)} className="text-white/40 hover:text-white transition-colors p-2"><MdAssessment size={24} /></button>
           </div>
           
-          {/* Correction ici : utilisation de isMeneurTurn défini plus haut */}
-          {isMeneurTurn && (
+          {isPlayerTurn && (gameState.meneurActive || gameState.stoppageTimeAction === 'player' || gameState.phase === 'ATTACK_DECLARED') && (
               <button onClick={() => handlePass('player')} className="bg-[#afff34]/10 text-[#afff34] px-4 py-1.5 rounded-full border border-[#afff34]/30 animate-pulse flex items-center gap-2 font-black text-xs">
-                {t('game.pass') || 'PASSER'} <MdReplay size={18} className="rotate-90" />
+                {gameState.phase === 'ATTACK_DECLARED' ? (t('game.pass') || 'NE PAS BLOQUER') : (t('game.skip_meneur') || 'PASSER')} <MdReplay size={18} className="rotate-90" />
               </button>
           )}
 
@@ -330,7 +327,6 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
           {inspectedCard && <InspectionModal key="inspect-modal" inspectedCard={inspectedCard} onClose={() => setInspectedCard(null)} actions={inspectionActions} onAction={executeAction} />}
       </AnimatePresence>
 
-       {/* GOAL ANIMATION */}
        {gameState.goalEvent && gameState.goalEvent.type !== 'GAME_OVER' && !showResultOverlay && (
         <GoalAnimation 
           type={gameState.goalEvent.type} scorer={gameState.goalEvent.scorer} scorerName={gameState.goalEvent.scorerName} reason={gameState.goalEvent.reason}
@@ -340,7 +336,6 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
         />
       )}
 
-      {/* FIN DE MATCH */}
        <AnimatePresence>
         {showResultOverlay && gameState.winner && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/95 backdrop-blur-xl z-[100] flex flex-col items-center justify-center p-6">

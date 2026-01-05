@@ -30,8 +30,9 @@ const InspectionModal: React.FC<InspectionModalProps> = ({
   if (!inspectedCard) return null;
 
   const handleActionClick = (type: GameActionType) => {
-    onClose();
-    setTimeout(() => onAction(type), 50);
+    // On exécute l'action directement. 
+    // La fonction onAction s'occupera de fermer la modale après avoir récupéré les données de la carte.
+    onAction(type);
   };
 
   const getActionButtonStyles = (type: GameActionType) => {
@@ -51,7 +52,6 @@ const InspectionModal: React.FC<InspectionModalProps> = ({
       exit={{ opacity: 0 }} 
       className="absolute inset-0 z-[200] backdrop-blur-sm flex items-center justify-center p-4"
     >
-        {/* Overlay rendu encore plus transparent (bg-black/20 au lieu de bg-black/40) 🔥 */}
         <div className="absolute inset-0 bg-black/20" onClick={onClose}></div>
 
         <motion.div 

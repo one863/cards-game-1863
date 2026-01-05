@@ -93,7 +93,6 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
           draft.meneurActive = false; 
 
           if (!hasBlockers) {
-              // But ouvert 🔥
               get().addLog(draft, 'logs.goal_open');
               get().resolveGoal(draft, playerType, opponentType, attackerId, "logs.goal_open");
           } else {
@@ -111,6 +110,20 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
         set(produce((state: FullGameStore) => {
             const draft = state.gameState;
             if (!draft || draft.winner || draft.turn !== playerType) return;
+            
+            const canPass = draft.meneurActive || 
+                            draft.stoppageTimeAction === playerType || 
+                            draft.phase === 'ATTACK_DECLARED';
+            
+            if (!canPass) return;
+
+            if (draft.phase === 'ATTACK_DECLARED' && draft.attackerInstanceId) {
+                 const AttackerType = playerType === 'player' ? 'opponent' : 'player';
+                 get().addLog(draft, 'logs.goal_open');
+                 get().resolveGoal(draft, AttackerType, playerType, draft.attackerInstanceId, "logs.goal_open");
+                 return;
+            }
+
             draft.meneurActive = false;
             get().addLog(draft, 'logs.pass_turn', { side: getSideKey(playerType) });
             draft.turn = playerType === 'player' ? 'opponent' : 'player';
@@ -140,19 +153,28 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
     handleBlock: (blockerId, boostId = null) => {
       set(produce((state: FullGameStore) => {
           const draft = state.gameState;
+          // IMPORTANT: On récupère l'ID de l'attaquant directement depuis le draft
           const attackerId = draft?.attackerInstanceId;
-          if (!draft || draft.winner || !attackerId) return;
+          
+          if (!draft || draft.winner || !attackerId) {
+              console.error("BLOCK_ERROR: No attacker found or game over");
+              return;
+          }
 
           const DefenderType = draft.turn;
           const AttackerType = DefenderType === 'player' ? 'opponent' : 'player';
+          
           const attackerSide = draft[AttackerType];
           const defenderSide = draft[DefenderType];
+          
           const attackerCard = attackerSide.field.find(c => c.instanceId === attackerId);
           const blockerCard = defenderSide.field.find(c => c.instanceId === blockerId);
           
           if (!attackerCard || !blockerCard) { 
+              console.error("BLOCK_ERROR: Attacker or Blocker not found in field", { attackerId, blockerId });
               draft.phase = 'MAIN'; draft.turn = AttackerType; draft.attackerInstanceId = null;
-              get().startTurn(draft); return; 
+              get().startTurn(draft); 
+              return; 
           }
 
           let boostValue = 0;
@@ -187,12 +209,9 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                   if (attIdx !== -1) { attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]); draft.explosionEvent = { active: true, timestamp: Date.now() }; }
               }
 
-              // Momentum goal log 🔥
               if (defenderSide.field.filter(c => c.isFlipped).length >= 3) {
                   get().addLog(draft, 'logs.goal_momentum');
-                  if (!get().checkMomentumGoal(draft)) {
-                       // continue
-                  }
+                  get().checkMomentumGoal(draft);
               } else {
                   draft.phase = 'MAIN';
                   draft.attackerInstanceId = null;
