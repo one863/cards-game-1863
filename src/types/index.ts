@@ -55,10 +55,17 @@ export interface GameState {
     active: boolean;
     timestamp: number;
   } | null;
+  boostEvent?: { // Nouvel événement Boost 🔥
+    active: boolean;
+    val: number;
+    side: 'player' | 'opponent';
+    timestamp: number;
+  } | null;
   attackerInstanceId?: string | null; // Suivi de l'attaquant par ID 🔥
   winner: 'player' | 'opponent' | 'draw' | null;
   hasActionUsed: boolean;
   stoppageTimeAction?: 'player' | 'opponent' | null;
+  meneurActive?: boolean; // Flag pour l'effet Meneur 🔥
 }
 
 export interface UserProfile {

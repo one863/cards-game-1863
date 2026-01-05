@@ -27,6 +27,9 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
         else if (draft.player.score < draft.opponent.score) draft.winner = 'opponent';
         else draft.winner = 'draw';
         
+        // Ajout du log de fin 🔥
+        addLog(draft, 'logs.final_whistle');
+
         draft.goalEvent = { 
             type: 'GAME_OVER', 
             reason: draft.winner === 'draw' ? "game.draw" : "game.game_over" 
@@ -51,8 +54,8 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
         opponent: { deck: oDeckTotal, hand: oDeckTotal.splice(0, GAME_RULES.HAND_SIZE), field: [], discard: [], score: 0, teamName: teamNames.opponent },
         turn: 'player', phase: 'MAIN',
         log: [{ key: 'logs.start', params: {}, id: Math.random() }],
-        goals: [], // Init
-        goalEvent: null, winner: null, hasActionUsed: false, stoppageTimeAction: null
+        goals: [], 
+        goalEvent: null, winner: null, hasActionUsed: false, stoppageTimeAction: null, meneurActive: false
       };
 
       set({
@@ -73,9 +76,7 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
       const activeSideKey = draft.turn;
       const activeSide = draft[activeSideKey];
       
-      activeSide.field.forEach(card => {
-          card.hasActed = false;
-      });
+      activeSide.field.forEach(card => { card.hasActed = false; });
 
       while (activeSide.hand.length < GAME_RULES.HAND_SIZE && activeSide.deck.length > 0) {
           activeSide.hand.push(activeSide.deck.pop()!);
@@ -109,14 +110,7 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
       
       const scorerName = attackerSide.field.find(c => c.instanceId === attackerId)?.name || 'Unknown';
       
-      // Enregistrement du but dans l'historique 🔥
-      draft.goals.push({
-          scorerSide: attackerSideKey,
-          scorerName: scorerName,
-          reason: reason,
-          timestamp: Date.now()
-      });
-
+      draft.goals.push({ scorerSide: attackerSideKey, scorerName: scorerName, reason: reason, timestamp: Date.now() });
       draft.goalEvent = { type: 'goal', scorer: attackerSideKey, scorerName, reason: reason };
 
       const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
@@ -129,27 +123,17 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
 
       draft.phase = 'MAIN';
       draft.attackerInstanceId = null;
-      
-      if (draft.stoppageTimeAction) {
-      } else {
-          draft.turn = defenderSideKey; 
-      }
+      if (!draft.stoppageTimeAction) draft.turn = defenderSideKey; 
     },
 
     resumeGame: () => {
         set(produce((state: FullGameStore) => {
             const draft = state.gameState;
             if (!draft) return;
-            
             draft.goalEvent = null;
-
             if (draft.winner) return;
-
-            if (draft.stoppageTimeAction) {
-                internalCheckGameOver(draft, true, get().addLog);
-            } else {
-                get().startTurn(draft);
-            }
+            if (draft.stoppageTimeAction) internalCheckGameOver(draft, true, get().addLog);
+            else get().startTurn(draft);
         }));
     },
 
@@ -161,7 +145,6 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
               const attackerSideKey = sideKey === 'player' ? 'opponent' : 'player';
               const attackerSide = draft[attackerSideKey];
               const attackerId = draft.attackerInstanceId || attackerSide.field[0]?.instanceId;
-              
               get().resolveGoal(draft, attackerSideKey, sideKey, attackerId!, "Momentum (3+ cartes retournées)");
               return true;
           }
@@ -171,12 +154,9 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
     },
 
     checkGameOver: (draft, forced = false) => {
-      if (draft) {
-          return internalCheckGameOver(draft, forced, get().addLog);
-      } else {
-          set(produce((state: FullGameStore) => {
-              if (state.gameState) internalCheckGameOver(state.gameState, forced, get().addLog);
-          }));
+      if (draft) return internalCheckGameOver(draft, forced, get().addLog);
+      else {
+          set(produce((state: FullGameStore) => { if (state.gameState) internalCheckGameOver(state.gameState, forced, get().addLog); }));
           return true;
       }
     }

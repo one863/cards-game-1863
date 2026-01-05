@@ -8,122 +8,97 @@ type Mentality = 'OFFENSIVE' | 'NEUTRAL' | 'DEFENSIVE';
  * Logique de décision de l'IA (Phase MAIN)
  * L'IA joue toujours le rôle de l'OPPONENT.
  */
-export const getAIDecision = (gameState: GameState) => {
-  const ai = gameState.opponent;
-  const player = gameState.player;
-  
-  // REGLE : On ne prend que les joueurs face visible et qui NE SONT PAS Gardiens (sauf urgence)
-  const activeAttackers = ai.field.filter(c => !c.isFlipped && (c.pos !== 'GK' || ai.field.length === 1));
-  const playerDefenders = player.field.filter(c => !c.isFlipped);
-
-  const aiActiveCount = ai.field.filter(c => !c.isFlipped).length;
-  const playerActiveCount = playerDefenders.length;
-
-  /**
-   * Calcule la puissance réelle d'un attaquant IA (VAEP + Bonus de poste/keywords)
-   */
-  const getTruePower = (card: Player, side: 'attacker' | 'defender', field: Player[]) => {
-      return card.vaep + getKeywordPowerBonus(card, side, field);
-  };
-
-  // --- 0. DERNIÈRE CHANCE (Stoppage Time) ---
-  if (gameState.stoppageTimeAction) {
-      if (activeAttackers.length > 0) {
-          const bestAttacker = activeAttackers.reduce((prev, curr) => 
-            getTruePower(prev, 'attacker', ai.field) > getTruePower(curr, 'attacker', ai.field) ? prev : curr
-          );
-          return { action: 'ATTACK', id: bestAttacker.instanceId, reason: "[STOPPAGE] Dernière action décisive !" };
+export const getAIDecision = (gameState: GameState, isMeneur: boolean = false) => {
+  try {
+      const ai = gameState.opponent;
+      const player = gameState.player;
+      
+      // Sécurité : Si l'IA n'a plus de cartes ni de joueurs, elle doit passer (ou perdre)
+      const aiActiveCount = ai.field.filter(c => !c.isFlipped).length;
+      if (ai.hand.length === 0 && aiActiveCount === 0) {
+          return { action: 'PASS', reason: "Plus de ressources" };
       }
-      if (ai.hand.length > 0 && ai.field.length < GAME_RULES.FIELD_SIZE) {
-          const bestCardIdx = ai.hand.reduce((bestIdx, current, idx, arr) => (current.vaep > arr[bestIdx].vaep) ? idx : bestIdx, 0);
-          return { action: 'PLAY', idx: bestCardIdx, reason: "[STOPPAGE] Dernière carte" };
-      }
-      return { action: 'PASS', reason: "Fin du match" };
-  }
 
-  // --- DÉTERMINATION DE LA MENTALITÉ 🔥 ---
-  let mentality: Mentality = 'NEUTRAL';
-  if (ai.score < player.score) {
-    mentality = 'OFFENSIVE'; 
-  } else if (ai.score > player.score) {
-    mentality = 'DEFENSIVE';
-  }
+      // Attaquants valides (non retournés, n'ayant pas agi, pas GK sauf si dernier joueur)
+      const activeAttackers = ai.field.filter(c => !c.isFlipped && !c.hasActed && (c.pos !== 'GK' || ai.field.length === 1));
+      const playerDefenders = player.field.filter(c => !c.isFlipped);
+      const playerActiveCount = playerDefenders.length;
 
-  // 1. OPPORTUNITÉ LÉTALE (Priorité Absolue)
-  if (activeAttackers.length > 0 && playerActiveCount === 0) {
-      const attacker = activeAttackers.reduce((prev, current) => 
-        getTruePower(prev, 'attacker', ai.field) > getTruePower(current, 'attacker', ai.field) ? prev : current
-      );
-      return { action: 'ATTACK', id: attacker.instanceId, reason: `[${mentality}] BUT OUVERT !` };
-  }
+      const getTruePower = (card: Player, side: 'attacker' | 'defender', field: Player[]) => {
+          return card.vaep + getKeywordPowerBonus(card, side, field);
+      };
 
-  // 2. LOGIQUE SELON LA MENTALITÉ (Si on a le choix)
-  if (mentality === 'DEFENSIVE') {
-    // Si on peut encore jouer une carte pour sécuriser, on le fait avant d'attaquer
-    if (ai.hand.length > 0 && aiActiveCount < 3 && ai.field.length < GAME_RULES.FIELD_SIZE) {
-        return { action: 'PLAY', idx: 0, reason: "[DEFENSIVE] Sécurisation maximale du terrain" };
-    }
-  }
-
-  // 3. ANALYSE DES DUELS AVEC BONUS 🔥 (Recherche d'une "Bonne" attaque)
-  if (activeAttackers.length > 0 && playerActiveCount > 0) {
+      // --- ANALYSE VISIBLE ---
       const defenderPowers = playerDefenders.map(d => getTruePower(d, 'defender', player.field));
-      const maxPlayerDefPower = Math.max(...defenderPowers);
-      const minPlayerDefPower = Math.min(...defenderPowers);
+      const maxPlayerDefPower = defenderPowers.length > 0 ? Math.max(...defenderPowers) : 0;
+      const minPlayerDefPower = defenderPowers.length > 0 ? Math.min(...defenderPowers) : 0;
 
-      // A. Attaque DOMINANTE (Victoire quasi-assurée)
-      const crushingAttacker = activeAttackers.find(att => {
-          const power = getTruePower(att, 'attacker', ai.field);
-          return power >= maxPlayerDefPower + 1;
-      });
+      // --- MENTALITÉ ---
+      let mentality: Mentality = 'NEUTRAL';
+      if (ai.score < player.score) mentality = 'OFFENSIVE'; 
+      else if (ai.score > player.score) mentality = 'DEFENSIVE';
 
-      if (crushingAttacker) {
-          return { action: 'ATTACK', id: crushingAttacker.instanceId, reason: `[${mentality}] Duel dominant (Puissance ${getTruePower(crushingAttacker, 'attacker', ai.field)})` };
+      // 1. OPPORTUNITÉ LÉTALE (BUT OUVERT)
+      if (activeAttackers.length > 0 && playerActiveCount === 0) {
+          const attacker = activeAttackers.reduce((prev, current) => 
+            getTruePower(prev, 'attacker', ai.field) > getTruePower(current, 'attacker', ai.field) ? prev : current
+          );
+          return { action: 'ATTACK', id: attacker.instanceId, reason: `BUT OUVERT !` };
       }
 
-      // B. Attaque OPPORTUNISTE (Victoire probable contre le plus faible)
-      // On évite ça si on est en pure défense et qu'on a peu de joueurs
-      if (mentality !== 'DEFENSIVE' || aiActiveCount >= 4) {
-          const strongAttacker = activeAttackers.find(att => {
-              const power = getTruePower(att, 'attacker', ai.field);
-              return power > minPlayerDefPower;
-          });
+      // 2. ATTAQUE TACTIQUE (Basée sur le visible uniquement 🔥)
+      if (activeAttackers.length > 0 && playerActiveCount > 0) {
+          // A. Attaque Gagnante (Force > Max Défense visible)
+          const winningAttacker = activeAttackers.find(att => 
+              getTruePower(att, 'attacker', ai.field) > maxPlayerDefPower
+          );
+          if (winningAttacker) {
+              return { action: 'ATTACK', id: winningAttacker.instanceId, reason: "Duel gagnant (visible)" };
+          }
 
-          if (strongAttacker) {
-              return { action: 'ATTACK', id: strongAttacker.instanceId, reason: `[${mentality}] Duel favorable` };
+          // B. Attaque sur le point faible (Force > Min Défense visible)
+          const opportunisticAttacker = activeAttackers.find(att => 
+              getTruePower(att, 'attacker', ai.field) > minPlayerDefPower
+          );
+          if (opportunisticAttacker && (mentality !== 'DEFENSIVE' || aiActiveCount >= 4)) {
+              return { action: 'ATTACK', id: opportunisticAttacker.instanceId, reason: "Attaque sur point faible" };
+          }
+          
+          // C. Cas AGRESSIF : Utiliser pour éliminer une grosse menace adverse
+          const aggro = activeAttackers.find(att => att.effects?.includes("AGRESSIF"));
+          if (aggro && maxPlayerDefPower >= 4) {
+              return { action: 'ATTACK', id: aggro.instanceId, reason: "Sacrifice AGRESSIF" };
+          }
+
+          // D. Forcer l'égalité (Attaquant puissant vs Défenseur puissant)
+          if (mentality === 'DEFENSIVE' || aiActiveCount > playerActiveCount) {
+              const drawAttacker = activeAttackers.find(att => getTruePower(att, 'attacker', ai.field) === maxPlayerDefPower);
+              if (drawAttacker && Math.random() > 0.5) {
+                  return { action: 'ATTACK', id: drawAttacker.instanceId, reason: "Duel d'usure (égalité)" };
+              }
           }
       }
-  }
 
-  // 4. DÉVELOPPEMENT (Si pas d'attaque sûre trouvée)
-  // REGLE : Si on peut jouer une carte, on le fait plutôt que de passer ou de faire une attaque suicidaire
-  if (ai.hand.length > 0 && ai.field.length < GAME_RULES.FIELD_SIZE) {
-    const bestCardIdxInHand = ai.hand.reduce((best, curr, idx, arr) => curr.vaep > arr[best].vaep ? idx : best, 0);
-    return { action: 'PLAY', idx: bestCardIdxInHand, reason: `[${mentality}] Renforcement terrain` };
-  }
-
-  // 5. CAS AGRESSIF (Optionnel)
-  const aggressifAttacker = activeAttackers.find(att => att.effects?.includes("AGRESSIF"));
-  if (aggressifAttacker && playerActiveCount > 0) {
-      const maxPlayerDefPower = Math.max(...playerDefenders.map(d => getTruePower(d, 'defender', player.field)));
-      if (maxPlayerDefPower >= 5) {
-          return { action: 'ATTACK', id: aggressifAttacker.instanceId, reason: `[${mentality}] Sacrifice AGRESSIF contre menace ${maxPlayerDefPower}` };
+      // 3. JOUER UNE CARTE (Si l'attaque est trop risquée ou impossible) 🔥
+      // SAUF si c'est un tour Meneur (interdit de jouer)
+      if (!isMeneur && ai.hand.length > 0 && ai.field.length < GAME_RULES.FIELD_SIZE) {
+          const bestCardIdx = ai.hand.reduce((best, curr, idx, arr) => curr.vaep > arr[best].vaep ? idx : best, 0);
+          return { action: 'PLAY', idx: bestCardIdx, reason: "Renforcement terrain" };
       }
-  }
 
-  // 6. ACTION FORCÉE (OBLIGATION DE JOUER)
-  // Si on arrive ici, c'est qu'on a pas trouvé d'attaque "sure" et qu'on ne peut pas jouer de carte (main vide ou terrain plein).
-  // La règle est : "On ne peut pas passer". Donc on DOIT attaquer si possible.
-  
-  if (activeAttackers.length > 0) {
-      // On prend l'attaquant le plus fort pour maximiser les chances (ou minimiser la casse)
-      const bestForcedAttacker = activeAttackers.reduce((prev, curr) => 
-        getTruePower(prev, 'attacker', ai.field) > getTruePower(curr, 'attacker', ai.field) ? prev : curr
-      );
-      return { action: 'ATTACK', id: bestForcedAttacker.instanceId, reason: "Action obligatoire (Terrain plein / Main vide)" };
-  }
+      // 4. DERNIER RECOURS (Tour Meneur ou Stoppage Time)
+      if (activeAttackers.length > 0) {
+          if (isMeneur || gameState.stoppageTimeAction) {
+              const bestForced = activeAttackers.reduce((prev, curr) => getTruePower(prev, 'attacker', ai.field) > getTruePower(curr, 'attacker', ai.field) ? prev : curr);
+              return { action: 'ATTACK', id: bestForced.instanceId, reason: "Offensive forcée" };
+          }
+      }
 
-  // 7. VRAIMENT RIEN À FAIRE (Pas de carte, pas d'attaquant valide)
-  // Cela ne devrait arriver qu'en cas de blocage total ou fin de ressources.
-  return { action: 'PASS', reason: "Aucune action possible" };
+      // 5. PASS (Vraiment si plus rien n'est possible)
+      return { action: 'PASS', reason: "Fin de ressources" };
+
+  } catch (error) {
+      console.error("AI Decision Error:", error);
+      return { action: 'PASS', reason: "Erreur IA (Fallback)" };
+  }
 };

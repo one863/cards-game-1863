@@ -13,9 +13,12 @@ export interface GameActionSlice {
   handleAIIntent: (action: string, reason: string) => void;
   handlePass: (playerType?: 'player' | 'opponent') => void;
   clearExplosion: () => void;
+  clearBoost: () => void;
 }
 
 type FullGameStore = GameStatusSlice & GameEngineSlice & GameActionSlice;
+
+const getSideKey = (type: string) => type === 'player' ? 'logs.side_you' : 'logs.side_opp';
 
 export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActionSlice> = (set, get) => {
 
@@ -24,6 +27,14 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
         set(produce((state: FullGameStore) => {
             if (state.gameState) {
                 state.gameState.explosionEvent = null;
+            }
+        }));
+    },
+
+    clearBoost: () => {
+        set(produce((state: FullGameStore) => {
+            if (state.gameState) {
+                state.gameState.boostEvent = null;
             }
         }));
     },
@@ -43,27 +54,22 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
 
         if (playerSide.hand[cardIndex]) {
           const card = playerSide.hand.splice(cardIndex, 1)[0];
-          
-          // EFFET MENEUR (CAM ou mot-clé MENEUR)
           const hasMeneur = card.effects?.includes("MENEUR") || card.pos === 'CAM';
           const canAttackWithOthers = playerSide.field.some(c => !c.isFlipped);
-
-          // Si c'est un MENEUR, il consomme son action pour en donner une à un autre
-          // NOTE: On ne force PAS l'attaque immédiate si pas possible ou si le joueur veut passer
-          // Le bouton "PASSER" est géré dans l'interface, ici on prépare juste l'état.
           const finalHasActed = hasMeneur && canAttackWithOthers;
           
           playerSide.field.push({ ...card, hasActed: finalHasActed, isFlipped: false });
-          get().addLog(draft, 'logs.play_card', { player: card.name, vaep: card.vaep });
+          get().addLog(draft, 'logs.play_card', { side: getSideKey(playerType), player: card.name, vaep: card.vaep });
 
           if (hasMeneur && canAttackWithOthers) {
-              get().addLog(draft, 'logs.meneur_trigger', { player: card.name });
-              // On reste dans le tour du même joueur pour qu'il puisse attaquer AVEC UN AUTRE
+              get().addLog(draft, 'logs.meneur_trigger', { side: getSideKey(playerType), player: card.name });
               draft.hasActionUsed = false; 
               draft.phase = 'MAIN';
+              draft.meneurActive = true; 
           } else {
               draft.turn = playerType === 'player' ? 'opponent' : 'player';
               draft.phase = 'MAIN';
+              draft.meneurActive = false;
               get().startTurn(draft);
           }
         }
@@ -80,12 +86,16 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
         const card = attackerSide.field.find(c => c.instanceId === attackerId);
         
         if (card && !card.isFlipped && !card.hasActed) {
-          get().addLog(draft, 'logs.attack', { player: card.name, vaep: card.vaep });
+          get().addLog(draft, 'logs.attack', { side: getSideKey(playerType), player: card.name, vaep: card.vaep });
           
           const hasBlockers = draft[opponentType].field.some(c => !c.isFlipped);
           
+          draft.meneurActive = false; 
+
           if (!hasBlockers) {
-              get().resolveGoal(draft, playerType, opponentType, attackerId, "Pénurie de bloqueurs");
+              // But ouvert 🔥
+              get().addLog(draft, 'logs.goal_open');
+              get().resolveGoal(draft, playerType, opponentType, attackerId, "logs.goal_open");
           } else {
               draft.attackerInstanceId = attackerId;
               draft.phase = 'ATTACK_DECLARED';
@@ -101,29 +111,30 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
         set(produce((state: FullGameStore) => {
             const draft = state.gameState;
             if (!draft || draft.winner || draft.turn !== playerType) return;
-            
-            // Logique spéciale pour passer le tour du MENEUR
-            const lastLog = draft.log[0];
-            const isMeneurPhase = lastLog?.key === 'logs.meneur_trigger';
-
-            if (isMeneurPhase) {
-                get().addLog(draft, 'logs.pass_turn'); // Ou un log spécifique "Meneur skipped"
-                // On redonne la main à l'adversaire
-                draft.turn = playerType === 'player' ? 'opponent' : 'player';
-                draft.phase = 'MAIN';
-                get().startTurn(draft);
-            } else {
-                // Passage de tour normal (fin de timer ou action volontaire rare)
-                get().addLog(draft, 'logs.pass_turn');
-                draft.turn = playerType === 'player' ? 'opponent' : 'player';
-                draft.phase = 'MAIN';
-                get().startTurn(draft);
-            }
+            draft.meneurActive = false;
+            get().addLog(draft, 'logs.pass_turn', { side: getSideKey(playerType) });
+            draft.turn = playerType === 'player' ? 'opponent' : 'player';
+            draft.phase = 'MAIN';
+            get().startTurn(draft);
         }));
     },
 
     handleAIIntent: (action, reason) => {
-      set(produce((state: FullGameStore) => { if (state.gameState) get().addLog(state.gameState, 'logs.ai_intent', { action, reason }); }));
+      set(produce((state: FullGameStore) => { 
+          if (state.gameState) {
+              const ai = state.gameState.opponent;
+              let mentality = 'logs.mentality_NEUTRAL';
+              if (ai.score < state.gameState.player.score) mentality = 'logs.mentality_OFFENSIVE';
+              else if (ai.score > state.gameState.player.score) mentality = 'logs.mentality_DEFENSIVE';
+
+              get().addLog(state.gameState, 'logs.ai_intent', { action, reason });
+              get().addLog(state.gameState, 'logs.ai_context', { 
+                  hand: ai.hand.length, 
+                  field: ai.field.filter(c => !c.isFlipped).length, 
+                  mentality 
+              });
+          }
+      }));
     },
 
     handleBlock: (blockerId, boostId = null) => {
@@ -140,10 +151,8 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
           const blockerCard = defenderSide.field.find(c => c.instanceId === blockerId);
           
           if (!attackerCard || !blockerCard) { 
-              draft.phase = 'MAIN'; 
-              draft.turn = AttackerType;
-              get().startTurn(draft); 
-              return; 
+              draft.phase = 'MAIN'; draft.turn = AttackerType; draft.attackerInstanceId = null;
+              get().startTurn(draft); return; 
           }
 
           let boostValue = 0;
@@ -153,7 +162,8 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                   const boostCard = defenderSide.hand.splice(boostIdx, 1)[0];
                   boostValue = boostCard.effects.includes("BOOST2") ? 2 : 1;
                   defenderSide.discard.push(boostCard);
-                  get().addLog(draft, 'logs.use_boost', { player: blockerCard.name, boostCard: boostCard.name, val: boostValue });
+                  get().addLog(draft, 'logs.use_boost', { side: getSideKey(DefenderType), player: blockerCard.name, val: boostValue });
+                  draft.boostEvent = { active: true, val: boostValue, side: DefenderType, timestamp: Date.now() };
               }
           }
 
@@ -163,81 +173,57 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
           const defDetails = getKeywordPowerDetails(blockerCard, 'defender', defenderSide.field);
           const defTotal = blockerCard.vaep + defDetails.bonus + boostValue;
 
-          // LOG DES EFFETS ACTIFS 🔥
-          if (attDetails.list) {
-              get().addLog(draft, 'logs.active_effects', { player: attackerCard.name, list: attDetails.list });
-          }
-          if (defDetails.list) {
-              get().addLog(draft, 'logs.active_effects', { player: blockerCard.name, list: defDetails.list });
-          }
+          if (attDetails.list) get().addLog(draft, 'logs.active_effects', { player: attackerCard.name, list: attDetails.list });
+          if (defDetails.list) get().addLog(draft, 'logs.active_effects', { player: blockerCard.name, list: defDetails.list });
 
-          get().addLog(draft, '-----------------------');
-          get().addLog(draft, 'logs.duel_win_check', { attacker: attackerCard.name, attTotal, defender: blockerCard.name, defTotal });
+          get().addLog(draft, 'logs.duel_win_check', { attName: attackerCard.name, attTotal, defName: blockerCard.name, defTotal });
 
           if (attTotal > defTotal) {
               get().addLog(draft, 'logs.duel_outcome_win', { attacker: attackerCard.name, defender: blockerCard.name });
               blockerCard.isFlipped = true; 
-              
-              // RENOMMAGE SACRIFICE -> AGRESSIF 🔥
               if (blockerCard.effects?.includes("AGRESSIF")) {
-                  get().addLog(draft, 'logs.aggressif_trigger', { player: blockerCard.name, victim: attackerCard.name });
+                  get().addLog(draft, 'logs.aggressif_trigger', { side: getSideKey(DefenderType), player: blockerCard.name, victim: attackerCard.name });
                   const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
-                  if (attIdx !== -1) {
-                      attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
-                      draft.explosionEvent = { active: true, timestamp: Date.now() };
-                  }
+                  if (attIdx !== -1) { attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]); draft.explosionEvent = { active: true, timestamp: Date.now() }; }
               }
 
-              if (!get().checkMomentumGoal(draft)) {
+              // Momentum goal log 🔥
+              if (defenderSide.field.filter(c => c.isFlipped).length >= 3) {
+                  get().addLog(draft, 'logs.goal_momentum');
+                  if (!get().checkMomentumGoal(draft)) {
+                       // continue
+                  }
+              } else {
                   draft.phase = 'MAIN';
                   draft.attackerInstanceId = null;
                   draft.turn = DefenderType; 
+                  draft.hasActionUsed = false;
                   get().startTurn(draft);
               }
           } 
           else if (attTotal < defTotal) {
               get().addLog(draft, 'logs.duel_outcome_lose', { attacker: attackerCard.name, defender: blockerCard.name });
-              
               const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
               if (attIdx !== -1) {
                   const attCard = attackerSide.field.splice(attIdx, 1)[0];
                   attackerSide.discard.push(attCard);
-
-                  // RENOMMAGE SACRIFICE -> AGRESSIF 🔥
                   if (attCard.effects?.includes("AGRESSIF")) {
-                      get().addLog(draft, 'logs.aggressif_trigger', { player: attCard.name, victim: blockerCard.name });
+                      get().addLog(draft, 'logs.aggressif_trigger', { side: getSideKey(AttackerType), player: attCard.name, victim: blockerCard.name });
                       const defIdx = defenderSide.field.findIndex(c => c.instanceId === blockerId);
-                      if (defIdx !== -1) {
-                          defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
-                          draft.explosionEvent = { active: true, timestamp: Date.now() };
-                      }
+                      if (defIdx !== -1) { defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]); draft.explosionEvent = { active: true, timestamp: Date.now() }; }
                   }
               }
-
               const flippedIdx = defenderSide.field.findIndex(c => c.isFlipped);
-              if (flippedIdx !== -1) {
-                  defenderSide.discard.push(defenderSide.field.splice(flippedIdx, 1)[0]);
-                  get().addLog(draft, 'logs.defensive_recovery');
-              }
-
-              draft.phase = 'MAIN';
-              draft.attackerInstanceId = null;
-              draft.turn = DefenderType; 
-              get().startTurn(draft);
+              if (flippedIdx !== -1) { defenderSide.discard.push(defenderSide.field.splice(flippedIdx, 1)[0]); get().addLog(draft, 'logs.defensive_recovery'); }
+              draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
           } 
           else {
               get().addLog(draft, 'logs.duel_outcome_draw', { attacker: attackerCard.name, defender: blockerCard.name });
-              
               const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
               if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
-              
               const defIdx = defenderSide.field.findIndex(c => c.instanceId === blockerId);
               if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
-
-              draft.phase = 'MAIN';
-              draft.attackerInstanceId = null;
-              draft.turn = DefenderType;
-              get().startTurn(draft);
+              draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
           }
       }));
       set({ selectedBoostId: null });

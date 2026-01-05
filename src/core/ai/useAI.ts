@@ -1,30 +1,49 @@
 // src/core/ai/useAI.ts
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { getAIDecision } from './logic/aiDecision';
 import { getKeywordPowerDetails } from '../rules/keywords';
 
 const useAI = () => {
   const { gameState, handlePlayCard, handleAttack, handleBlock, handlePass, checkGameOver } = useGameStore();
+  const lastActionTime = useRef<number>(0);
+  const lastPhase = useRef<string>('');
+  const lastMeneur = useRef<boolean>(false);
+  const stuckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!gameState || gameState.turn !== 'opponent' || gameState.winner || gameState.goalEvent) return;
+    if (!gameState || gameState.turn !== 'opponent' || gameState.winner || gameState.goalEvent) {
+        if (stuckTimer.current) clearTimeout(stuckTimer.current);
+        return;
+    }
+
+    const now = Date.now();
+    
+    // --- WATCHDOG ANTI-BLOCAGE ---
+    // Si l'IA est bloquée plus de 3s dans le même état, on force le passage.
+    if (stuckTimer.current) clearTimeout(stuckTimer.current);
+    stuckTimer.current = setTimeout(() => {
+        console.warn("⚠️ AI Watchdog triggered: Forcing PASS");
+        handlePass('opponent');
+    }, 4000); // 4 secondes de tolérance
 
     const timer = setTimeout(() => {
+      // DÉBLOCAGE : On autorise si la phase change OU si le flag Meneur change
+      const phaseChanged = gameState.phase !== lastPhase.current;
+      const meneurChanged = !!gameState.meneurActive !== lastMeneur.current;
       
-      // --- CAS SPÉCIAL : MENEUR DE L'IA VIENT D'ARRIVER ---
-      // L'IA doit décider si elle attaque immédiatement ou si elle passe.
-      const lastLog = gameState.log[0];
-      const isMeneurPhase = lastLog?.key === 'logs.meneur_trigger' && gameState.phase === 'MAIN' && !gameState.hasActionUsed;
+      if (!phaseChanged && !meneurChanged && now - lastActionTime.current < 800) return;
 
-      if (isMeneurPhase) {
-          // On réutilise la logique de décision standard pour voir si une attaque est intéressante
-          const decision = getAIDecision(gameState);
-          
+      lastActionTime.current = Date.now();
+      lastPhase.current = gameState.phase;
+      lastMeneur.current = !!gameState.meneurActive;
+      
+      // --- CAS SPÉCIAL : EFFET MENEUR ---
+      if (gameState.meneurActive && gameState.phase === 'MAIN' && !gameState.hasActionUsed) {
+          const decision = getAIDecision(gameState, true);
           if (decision.action === 'ATTACK') {
               handleAttack(decision.id!, 'opponent');
           } else {
-              // Si l'IA ne veut pas attaquer (pas sûr, pas rentable), elle passe ce tour bonus
               handlePass('opponent');
           }
           return;
@@ -38,7 +57,6 @@ const useAI = () => {
         const blockers = gameState.opponent.field.filter(c => !c.isFlipped);
         if (blockers.length > 0 && attackerCard) {
           const attDetails = getKeywordPowerDetails(attackerCard, 'attacker', gameState.player.field);
-          // MOMENTUM REMOVED HERE 🔥
           const attTotalPower = attackerCard.vaep + attDetails.bonus;
 
           const sortedBlockers = [...blockers].sort((a, b) => {
@@ -81,50 +99,49 @@ const useAI = () => {
                       }
                   }
               }
-              
               if (!chosenBlocker) {
-                  chosenBlocker = sortedBlockers[0]; 
+                  const aggressiveBlocker = sortedBlockers.find(b => b.effects?.includes("AGRESSIF"));
+                  chosenBlocker = aggressiveBlocker || sortedBlockers[0]; 
               }
           }
-
           handleBlock(chosenBlocker.instanceId!, chosenBoostId);
         } else {
-            if (gameState.stoppageTimeAction) checkGameOver(true);
+            if (gameState.stoppageTimeAction) checkGameOver(gameState, true);
             else handlePass('opponent'); 
         }
         return;
       }
 
-      // 2. GESTION DU TOUR
+      // 2. TOURS NORMAUX
       if (gameState.phase === 'MAIN') {
-        const decision = getAIDecision(gameState);
-        
+        const decision = getAIDecision(gameState, false);
         if (decision.action === 'PLAY') {
             handlePlayCard(decision.idx!, 'opponent');
         } else if (decision.action === 'ATTACK') {
             handleAttack(decision.id!, 'opponent');
         } else {
             if (gameState.stoppageTimeAction) {
-                checkGameOver(true);
+                checkGameOver(gameState, true);
             } else {
                 handlePass('opponent');
             }
         }
       }
-    }, 3000); // Increased delay to 3000ms as requested
+    }, 1000); 
 
-    return () => clearTimeout(timer);
+    return () => {
+        clearTimeout(timer);
+        if (stuckTimer.current) clearTimeout(stuckTimer.current);
+    };
   }, [
     gameState?.turn, 
     gameState?.phase, 
     gameState?.attackerInstanceId, 
     gameState?.stoppageTimeAction, 
     gameState?.hasActionUsed,
+    gameState?.meneurActive,
     !!gameState?.goalEvent,
-    gameState?.opponent.field.length,
-    gameState?.opponent.hand.length,
-    gameState?.player.field.length,
-    gameState?.log // Ajout de log aux dépendances pour détecter le trigger Meneur
+    !!gameState?.winner
   ]);
 };
 
