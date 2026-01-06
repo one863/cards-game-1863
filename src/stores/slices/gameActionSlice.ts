@@ -2,18 +2,20 @@ import { StateCreator } from 'zustand';
 import { produce } from 'immer';
 import { GameStatusSlice } from './gameStatusSlice';
 import { GameEngineSlice } from './gameEngineSlice';
-import { getKeywordPowerDetails } from '../../core/rules/keywords';
 import { GAME_RULES } from '../../core/rules/settings';
-import { GameState } from '../../types';
+import { GameState, ExceptionalEventType } from '../../types';
+import { triggerEffects, getEffectValue, calculateTotalPowerBonus } from '../../core/engine/effectSystem';
 
 export interface GameActionSlice {
   handlePlayCard: (cardIndex: number, playerType?: 'player' | 'opponent') => void;
   handleAttack: (attackerId: string, playerType?: 'player' | 'opponent') => void;
   handleBlock: (blockerId: string, boostId?: string | null) => void;
   handleAIIntent: (action: string, reason: string) => void;
-  handlePass: (playerType?: 'player' | 'opponent') => void;
+  handlePass: (playerType?: 'player' | 'opponent', force?: boolean) => void;
   clearExplosion: () => void;
   clearBoost: () => void;
+  clearPenalty: () => void; 
+  clearExceptionalEvent: () => void; // --- NOUVEAU ---
 }
 
 type FullGameStore = GameStatusSlice & GameEngineSlice & GameActionSlice;
@@ -25,17 +27,28 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
   return {
     clearExplosion: () => {
         set(produce((state: FullGameStore) => {
-            if (state.gameState) {
-                state.gameState.explosionEvent = null;
-            }
+            if (state.gameState) state.gameState.explosionEvent = null;
         }));
     },
 
     clearBoost: () => {
         set(produce((state: FullGameStore) => {
+            if (state.gameState) state.gameState.boostEvent = null;
+        }));
+    },
+
+    clearPenalty: () => {
+        set(produce((state: FullGameStore) => {
             if (state.gameState) {
-                state.gameState.boostEvent = null;
+                state.gameState.penaltyEvent = null;
+                state.gameState.exceptionalEvent = null;
             }
+        }));
+    },
+
+    clearExceptionalEvent: () => {
+        set(produce((state: FullGameStore) => {
+            if (state.gameState) state.gameState.exceptionalEvent = null;
         }));
     },
 
@@ -43,7 +56,6 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
       set(produce((state: FullGameStore) => {
         const draft = state.gameState;
         if (!draft || draft.winner || draft.hasActionUsed || draft.turn !== playerType) return;
-        
         const playerSide = draft[playerType];
         if (!playerSide || !playerSide.hand || !playerSide.field) return;
 
@@ -54,23 +66,19 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
 
         if (playerSide.hand[cardIndex]) {
           const card = playerSide.hand.splice(cardIndex, 1)[0];
-          const hasMeneur = card.effects?.includes("MENEUR") || card.pos === 'CAM';
-          const canAttackWithOthers = playerSide.field.some(c => !c.isFlipped);
-          const finalHasActed = hasMeneur && canAttackWithOthers;
-          
-          playerSide.field.push({ ...card, hasActed: finalHasActed, isFlipped: false });
+          playerSide.field.push({ ...card, hasActed: false, isFlipped: false });
           get().addLog(draft, 'logs.play_card', { side: getSideKey(playerType), player: card.name, vaep: card.vaep });
 
-          if (hasMeneur && canAttackWithOthers) {
-              get().addLog(draft, 'logs.meneur_trigger', { side: getSideKey(playerType), player: card.name });
-              draft.hasActionUsed = false; 
-              draft.phase = 'MAIN';
-              draft.meneurActive = true; 
-          } else {
+          const addLogWrapper = (key: string, params?: any) => get().addLog(draft, key, params);
+          const playedCardRef = playerSide.field[playerSide.field.length - 1];
+          triggerEffects('onPlay', draft, playedCardRef, playerType, addLogWrapper);
+
+          if (!draft.meneurActive) {
               draft.turn = playerType === 'player' ? 'opponent' : 'player';
               draft.phase = 'MAIN';
-              draft.meneurActive = false;
               get().startTurn(draft);
+          } else {
+              draft.phase = 'MAIN';
           }
         }
       }));
@@ -82,16 +90,12 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
         if (!draft || draft.winner || draft.hasActionUsed || draft.turn !== playerType) return;
         const attackerSide = draft[playerType];
         const opponentType = playerType === 'player' ? 'opponent' : 'player';
-        
         const card = attackerSide.field.find(c => c.instanceId === attackerId);
         
         if (card && !card.isFlipped && !card.hasActed) {
           get().addLog(draft, 'logs.attack', { side: getSideKey(playerType), player: card.name, vaep: card.vaep });
-          
           const hasBlockers = draft[opponentType].field.some(c => !c.isFlipped);
-          
           draft.meneurActive = false; 
-
           if (!hasBlockers) {
               get().addLog(draft, 'logs.goal_open');
               get().resolveGoal(draft, playerType, opponentType, attackerId, "logs.goal_open");
@@ -106,15 +110,11 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
       set({ selectedAttackerId: null });
     },
 
-    handlePass: (playerType = 'player') => {
+    handlePass: (playerType = 'player', force = false) => {
         set(produce((state: FullGameStore) => {
             const draft = state.gameState;
             if (!draft || draft.winner || draft.turn !== playerType) return;
-            
-            const canPass = draft.meneurActive || 
-                            draft.stoppageTimeAction === playerType || 
-                            draft.phase === 'ATTACK_DECLARED';
-            
+            const canPass = force || draft.meneurActive || draft.stoppageTimeAction === playerType || draft.phase === 'ATTACK_DECLARED';
             if (!canPass) return;
 
             if (draft.phase === 'ATTACK_DECLARED' && draft.attackerInstanceId) {
@@ -123,7 +123,6 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                  get().resolveGoal(draft, AttackerType, playerType, draft.attackerInstanceId, "logs.goal_open");
                  return;
             }
-
             draft.meneurActive = false;
             get().addLog(draft, 'logs.pass_turn', { side: getSideKey(playerType) });
             draft.turn = playerType === 'player' ? 'opponent' : 'player';
@@ -139,13 +138,8 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
               let mentality = 'logs.mentality_NEUTRAL';
               if (ai.score < state.gameState.player.score) mentality = 'logs.mentality_OFFENSIVE';
               else if (ai.score > state.gameState.player.score) mentality = 'logs.mentality_DEFENSIVE';
-
               get().addLog(state.gameState, 'logs.ai_intent', { action, reason });
-              get().addLog(state.gameState, 'logs.ai_context', { 
-                  hand: ai.hand.length, 
-                  field: ai.field.filter(c => !c.isFlipped).length, 
-                  mentality 
-              });
+              get().addLog(state.gameState, 'logs.ai_context', { hand: ai.hand.length, field: ai.field.filter(c => !c.isFlipped).length, mentality });
           }
       }));
     },
@@ -153,28 +147,19 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
     handleBlock: (blockerId, boostId = null) => {
       set(produce((state: FullGameStore) => {
           const draft = state.gameState;
-          // IMPORTANT: On récupère l'ID de l'attaquant directement depuis le draft
           const attackerId = draft?.attackerInstanceId;
-          
-          if (!draft || draft.winner || !attackerId) {
-              console.error("BLOCK_ERROR: No attacker found or game over");
-              return;
-          }
+          if (!draft || draft.winner || !attackerId) return;
 
           const DefenderType = draft.turn;
           const AttackerType = DefenderType === 'player' ? 'opponent' : 'player';
-          
           const attackerSide = draft[AttackerType];
           const defenderSide = draft[DefenderType];
-          
           const attackerCard = attackerSide.field.find(c => c.instanceId === attackerId);
           const blockerCard = defenderSide.field.find(c => c.instanceId === blockerId);
           
           if (!attackerCard || !blockerCard) { 
-              console.error("BLOCK_ERROR: Attacker or Blocker not found in field", { attackerId, blockerId });
               draft.phase = 'MAIN'; draft.turn = AttackerType; draft.attackerInstanceId = null;
-              get().startTurn(draft); 
-              return; 
+              get().startTurn(draft); return; 
           }
 
           let boostValue = 0;
@@ -182,17 +167,16 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
               const boostIdx = defenderSide.hand.findIndex(c => c.instanceId === boostId);
               if (boostIdx !== -1) {
                   const boostCard = defenderSide.hand.splice(boostIdx, 1)[0];
-                  boostValue = boostCard.effects.includes("BOOST2") ? 2 : 1;
+                  boostValue = getEffectValue(boostCard, 'value');
                   defenderSide.discard.push(boostCard);
                   get().addLog(draft, 'logs.use_boost', { side: getSideKey(DefenderType), player: blockerCard.name, val: boostValue });
                   draft.boostEvent = { active: true, val: boostValue, side: DefenderType, timestamp: Date.now() };
               }
           }
 
-          const attDetails = getKeywordPowerDetails(attackerCard, 'attacker', attackerSide.field);
+          const attDetails = calculateTotalPowerBonus(draft, attackerCard, AttackerType, 'attacker');
           const attTotal = attackerCard.vaep + attDetails.bonus;
-
-          const defDetails = getKeywordPowerDetails(blockerCard, 'defender', defenderSide.field);
+          const defDetails = calculateTotalPowerBonus(draft, blockerCard, DefenderType, 'defender');
           const defTotal = blockerCard.vaep + defDetails.bonus + boostValue;
 
           if (attDetails.list) get().addLog(draft, 'logs.active_effects', { player: attackerCard.name, list: attDetails.list });
@@ -200,24 +184,18 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
 
           get().addLog(draft, 'logs.duel_win_check', { attName: attackerCard.name, attTotal, defName: blockerCard.name, defTotal });
 
+          const addLogWrapper = (key: string, params?: any) => get().addLog(draft, key, params);
+
           if (attTotal > defTotal) {
               get().addLog(draft, 'logs.duel_outcome_win', { attacker: attackerCard.name, defender: blockerCard.name });
               blockerCard.isFlipped = true; 
-              if (blockerCard.effects?.includes("AGRESSIF")) {
-                  get().addLog(draft, 'logs.aggressif_trigger', { side: getSideKey(DefenderType), player: blockerCard.name, victim: attackerCard.name });
-                  const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
-                  if (attIdx !== -1) { attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]); draft.explosionEvent = { active: true, timestamp: Date.now() }; }
-              }
-
+              triggerEffects('onDuelResolve', draft, attackerCard, AttackerType, addLogWrapper, ['WIN', blockerCard]);
+              triggerEffects('onDuelResolve', draft, blockerCard, DefenderType, addLogWrapper, ['LOSE', attackerCard]);
               if (defenderSide.field.filter(c => c.isFlipped).length >= 3) {
                   get().addLog(draft, 'logs.goal_momentum');
                   get().checkMomentumGoal(draft);
               } else {
-                  draft.phase = 'MAIN';
-                  draft.attackerInstanceId = null;
-                  draft.turn = DefenderType; 
-                  draft.hasActionUsed = false;
-                  get().startTurn(draft);
+                  draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
               }
           } 
           else if (attTotal < defTotal) {
@@ -226,11 +204,8 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
               if (attIdx !== -1) {
                   const attCard = attackerSide.field.splice(attIdx, 1)[0];
                   attackerSide.discard.push(attCard);
-                  if (attCard.effects?.includes("AGRESSIF")) {
-                      get().addLog(draft, 'logs.aggressif_trigger', { side: getSideKey(AttackerType), player: attCard.name, victim: blockerCard.name });
-                      const defIdx = defenderSide.field.findIndex(c => c.instanceId === blockerId);
-                      if (defIdx !== -1) { defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]); draft.explosionEvent = { active: true, timestamp: Date.now() }; }
-                  }
+                  triggerEffects('onDuelResolve', draft, attackerCard, AttackerType, addLogWrapper, ['LOSE', blockerCard]);
+                  triggerEffects('onDuelResolve', draft, blockerCard, DefenderType, addLogWrapper, ['WIN', attackerCard]);
               }
               const flippedIdx = defenderSide.field.findIndex(c => c.isFlipped);
               if (flippedIdx !== -1) { defenderSide.discard.push(defenderSide.field.splice(flippedIdx, 1)[0]); get().addLog(draft, 'logs.defensive_recovery'); }
@@ -238,11 +213,57 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
           } 
           else {
               get().addLog(draft, 'logs.duel_outcome_draw', { attacker: attackerCard.name, defender: blockerCard.name });
-              const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
-              if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
-              const defIdx = defenderSide.field.findIndex(c => c.instanceId === blockerId);
-              if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
-              draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
+              
+              // --- LOGIQUE ÉVÉNEMENTS EXCEPTIONNELS EN CAS D'ÉGALITÉ ---
+              let selectedEvent: ExceptionalEventType = null;
+
+              // 1. Priorité au Penalty si "AGRESSIF" (Événement exceptionnel n°1)
+              if (blockerCard.effects?.includes("AGRESSIF")) {
+                  selectedEvent = 'PENALTY';
+              } 
+              // 2. Futurs événements (Corner, Coup franc) peuvent être ajoutés ici
+              /* 
+              else if (Math.random() < 0.2) {
+                  selectedEvent = 'CORNER';
+              }
+              */
+
+              if (selectedEvent) {
+                  const result = selectedEvent === 'PENALTY' ? (Math.random() < 0.7 ? 'goal' : 'saved') : 'success';
+                  
+                  draft.exceptionalEvent = {
+                      type: selectedEvent,
+                      attackerName: attackerCard.name,
+                      defenderName: blockerCard.name,
+                      result: result as any,
+                      timestamp: Date.now()
+                  };
+                  
+                  // On garde aussi penaltyEvent pour la compatibilité avec l'UI actuelle si besoin
+                  if (selectedEvent === 'PENALTY') {
+                      draft.penaltyEvent = {
+                          active: true,
+                          attackerName: attackerCard.name,
+                          defenderName: blockerCard.name,
+                          result: result as any,
+                          timestamp: Date.now()
+                      };
+                      get().addLog(draft, 'logs.penalty_trigger', { player: blockerCard.name });
+                  } else {
+                      get().addLog(draft, `logs.${selectedEvent.toLowerCase()}_trigger`, { player: blockerCard.name });
+                  }
+              } else {
+                  // Défausse mutuelle classique (Si aucun événement exceptionnel)
+                  const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
+                  if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
+                  const defIdx = defenderSide.field.findIndex(c => c.instanceId === blockerId);
+                  if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
+                  
+                  triggerEffects('onDuelResolve', draft, attackerCard, AttackerType, addLogWrapper, ['DRAW', blockerCard]);
+                  triggerEffects('onDuelResolve', draft, blockerCard, DefenderType, addLogWrapper, ['DRAW', attackerCard]);
+                  
+                  draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
+              }
           }
       }));
       set({ selectedBoostId: null });

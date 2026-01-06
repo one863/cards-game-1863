@@ -2,7 +2,7 @@ export type Position = 'GK' | 'CB' | 'LB' | 'RB' | 'CDM' | 'CM' | 'CAM' | 'LW' |
 
 export interface Player {
   id: string;
-  instanceId?: string; // ID unique pour chaque instance de carte sur le terrain 🔥
+  instanceId?: string;
   name: string;
   fullName: string;
   pos: Position;
@@ -27,7 +27,7 @@ export interface GameSide {
   field: Player[];
   discard: Player[];
   score: number;
-  teamName: string; // Ajout du nom de l'équipe 🔥
+  teamName: string;
 }
 
 export interface GoalRecord {
@@ -37,6 +37,8 @@ export interface GoalRecord {
   timestamp: number;
 }
 
+export type ExceptionalEventType = 'PENALTY' | 'CORNER' | 'FREE_KICK' | null;
+
 export interface GameState {
   isFriendly: boolean;
   player: GameSide;
@@ -44,7 +46,7 @@ export interface GameState {
   turn: 'player' | 'opponent';
   phase: 'MAIN' | 'ATTACK_DECLARED';
   log: GameLog[];
-  goals: GoalRecord[]; // Historique des buts 🔥
+  goals: GoalRecord[];
   goalEvent: {
     type: 'goal' | 'GAME_OVER';
     scorer?: 'player' | 'opponent';
@@ -55,17 +57,35 @@ export interface GameState {
     active: boolean;
     timestamp: number;
   } | null;
-  boostEvent?: { // Nouvel événement Boost 🔥
+  boostEvent?: {
     active: boolean;
     val: number;
     side: 'player' | 'opponent';
     timestamp: number;
   } | null;
-  attackerInstanceId?: string | null; // Suivi de l'attaquant par ID 🔥
+  
+  // --- SYSTÈME D'ÉVÉNEMENTS EXCEPTIONNELS ---
+  exceptionalEvent?: {
+    type: ExceptionalEventType;
+    attackerName: string;
+    defenderName: string;
+    result?: 'goal' | 'saved' | 'success' | 'fail';
+    timestamp: number;
+  } | null;
+
+  penaltyEvent?: { // Gardé pour compatibilité temporaire si nécessaire, mais on privilégiera exceptionalEvent
+    active: boolean;
+    attackerName: string;
+    defenderName: string;
+    result: 'goal' | 'saved';
+    timestamp: number;
+  } | null;
+
+  attackerInstanceId?: string | null;
   winner: 'player' | 'opponent' | 'draw' | null;
   hasActionUsed: boolean;
   stoppageTimeAction?: 'player' | 'opponent' | null;
-  meneurActive?: boolean; // Flag pour l'effet Meneur 🔥
+  meneurActive?: boolean;
 }
 
 export interface UserProfile {

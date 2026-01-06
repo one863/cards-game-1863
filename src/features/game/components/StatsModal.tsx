@@ -39,12 +39,12 @@ const StatsModal: React.FC<StatsModalProps> = ({
       <div className="flex-1 overflow-y-auto p-6">
           <div className="flex justify-center items-center gap-8 mb-8 bg-white/5 p-6 rounded-2xl border border-white/5">
               <div className="text-center w-1/3">
-                  <div className="text-xs text-[#888] font-black uppercase mb-2 tracking-widest">{player.teamName}</div>
+                  <div className="text-xs text-[#888] font-black uppercase mb-2 tracking-widest">{t(player.teamName)}</div>
                   <div className="text-5xl font-black text-[#afff34]">{player.score}</div>
               </div>
               <div className="text-2xl text-[#333] font-thin">:</div>
               <div className="text-center w-1/3">
-                  <div className="text-xs text-[#888] font-black uppercase mb-2 tracking-widest">{opponent.teamName}</div>
+                  <div className="text-xs text-[#888] font-black uppercase mb-2 tracking-widest">{t(opponent.teamName)}</div>
                   <div className="text-5xl font-black text-red-500">{opponent.score}</div>
               </div>
           </div>

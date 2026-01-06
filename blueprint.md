@@ -1,66 +1,108 @@
-# **ONE863 - DOCUMENT DE RÉFÉRENCE (BLUEPRINT)**
+# Blueprint du Projet : Football Card Battle
 
-Ce document définit les règles officielles du jeu et la logique comportementale de l'IA.
+## 1. Aperçu du Projet
+Application de jeu de cartes de football stratégique où les joueurs s'affrontent avec des équipes nationales. Le gameplay est basé sur le placement tactique, les duels de puissance et la gestion d'événements aléatoires.
 
----
+## 2. État Actuel du Projet
 
-## **I. RÈGLES DU JEU (GAMEPLAY)**
+### Style et Design
+- **Esthétique Moderne** : Interface sombre (dark mode) avec des dégradés profonds et des bordures subtiles.
+- **Cartes Interactives** : Mini-cartes et Grandes cartes avec effets de rotation (AnimatePresence), animations de survol et feedback visuel lors des actions.
+- **Typographie expressive** : Utilisation de polices larges et grasses pour les valeurs de puissance (VAEP).
+- **Effets Visuels** : Animations d'explosion (pour l'effet Agressif), de but, de boost et de pénalité.
 
-### **1. Initialisation**
-*   **Deck** : 16 cartes par joueur.
-*   **Main de départ** : 4 cartes piochées.
-*   **Engagement** : Le joueur à domicile commence.
+### Fonctionnalités Implémentées
+- **Système de Match Complet** : Phases MAIN (jeu, attaque) et ATTACK_DECLARED (blocage, boost).
+- **Gestion des Équipes** : Sélection de l'équipe nationale au début du jeu.
+- **Boutique et Mercato** : Achat de packs de boosters et gestion de la collection de joueurs.
+- **IA Stratégique** :
+    - Mode Économie (gestion de la main).
+    - Remplacement tactique (sacrifice pour libérer des slots).
+    - Ciblage agressif (neutralisation des stars adverses).
+    - Prudence accrue contre les défenseurs d'élite.
+- **Système de Duel Avancé** :
+    - Prise en compte des bonus de poste et des effets de synergie (ex: Moteur CM).
+    - Gestion des buffs et débuffs dynamiques.
+- **Système d'Événements Exceptionnels (Nouveau)** :
+    - Déclenchement d'événements lors d'une égalité (Match Nul).
+    - **Penalty** : Prioritaire si le défenseur est "AGRESSIF" (70% de chance de but).
+    - Architecture prête pour Corner et Coup Franc.
+- **Règles Spécifiques** :
+    - **ATT > DEF** : Le défenseur est retourné (Flipped).
+    - **ATT < DEF** : L'attaquant est défaussé, le défenseur reste et défausse une de ses cartes retournées.
+    - **ATT = DEF** : Événement exceptionnel si condition remplie, sinon double défausse.
+    - **Momentum Goal** : But automatique si un joueur a 3 cartes retournées.
 
-### **2. Cycle du Tour**
-Au début de chaque tour, le joueur actif :
-1.  **Pioche** : Complète sa main jusqu'à 4 cartes.
-2.  **Réinitialisation** : Tous les joueurs sur le terrain sont "frais" (pas de fatigue).
-3.  **Action Unique Obligatoire** : Le joueur **doit** effectuer une action. Il n'est pas possible de passer son tour normalement.
-    *   **JOUER** : Placer une carte de sa main sur le terrain. Le tour passe à l'adversaire après la pose, sauf effet `MENEUR`.
-    *   **ATTAQUER** : Choisir un joueur sur son terrain (face visible) pour attaquer.
-4.  **Exception (Meneur)** : Si une carte avec l'effet `MENEUR` est jouée, elle offre une action d'attaque immédiate supplémentaire avec un autre joueur. Dans ce cas précis (et uniquement celui-là), le joueur peut choisir de **PASSER** s'il ne souhaite pas utiliser cette action bonus.
-5.  **Temps Additionnel** : En fin de partie, si un joueur n'a plus de cartes, l'autre joueur peut effectuer une dernière action ou passer s'il ne peut rien faire.
+### Architecture des Fichiers
 
-### **3. Phase d'Attaque et Blocage**
-*   **Déclaration** : L'attaquant est sélectionné.
-*   **Blocage Obligatoire** : L'adversaire **doit** proposer un bloqueur s'il possède au moins un joueur face visible.
-*   **Boost de Défense** : Le défenseur peut utiliser une carte avec l'effet `BOOST` de sa main pour augmenter son score de défense.
-*   **But Automatique (But Ouvert)** : Si l'adversaire n'a aucun joueur face visible, le but est marqué immédiatement.
+Le projet suit une structure React/Vite standard, organisée pour une bonne séparation des préoccupations :
 
-### **4. Résolution du Duel (ATT vs DEF)**
-On compare la puissance finale (VAEP + Bonus + Capacités).
+-   **`public/`** : Contient les assets statiques comme `vite.svg`.
+-   **`src/`** : Le répertoire principal du code source.
+    -   **`src/app/`** : Fichiers globaux de l'application (ex: `LanguageContext.tsx`).
+    -   **`src/assets/`** : Ressources comme les images (ex: `react.svg`).
+    -   **`src/components/`** : Composants React réutilisables.
+        -   **`src/components/card/`** : Composants spécifiques aux cartes (`Card.tsx`, `MiniCard.tsx`, `LargeCard.tsx`).
+        -   **`src/components/ui/`** : Composants d'interface utilisateur génériques (animations, etc.).
+    -   **`src/core/`** : Logique métier fondamentale et règles du jeu.
+        -   **`src/core/ai/`** : Intelligence Artificielle (`useAI.ts`, `logic/aiDecision.ts`).
+        -   **`src/core/engine/`** : Moteur de jeu (système d'effets, génération de joueurs, logique de boutique).
+        -   **`src/core/i18n/`** : Fichiers d'internationalisation (langues).
+        -   **`src/core/rules/`** : Définition des règles du jeu (`settings.ts`).
+    -   **`src/data/`** : Données statiques du jeu (boosters, équipes, joueurs).
+    -   **`src/features/`** : Modules de fonctionnalités spécifiques (écrans de jeu, mercato, boutique).
+        -   **`src/features/game/`** : Logique et composants de l'écran de jeu (`GameScreen.tsx`, `TeamSelectionScreen.tsx`).
+        -   **`src/features/mercato/`** : Logique et composants de l'écran du mercato.
+        -   **`src/features/shop/`** : Logique et composants de l'écran de la boutique.
+    -   **`src/stores/`** : Gestion de l'état global avec Zustand (`useGameStore.ts`, `slices/`).
+        -   **`src/stores/slices/`** : Slices spécifiques pour la gestion de l'état du jeu (actions, moteur, statut, utilisateur).
+    -   **`src/styles/`** : Feuilles de style CSS (`global.css`, `game.css`, `menu.css`).
+    -   **`src/test/`** : Fichiers de configuration et utilitaires de test.
+    -   **`src/types/`** : Définitions de types TypeScript (interfaces, types personnalisés).
+    -   **`src/utils/`** : Fonctions utilitaires diverses (générateur de deck).
+    -   **`src/App.tsx`** : Composant racine de l'application.
+    -   **`src/main.tsx`** : Point d'entrée principal de l'application.
+-   **`.idx/`** : Fichiers de configuration spécifiques à l'environnement Firebase Studio (`dev.nix`, `icon.png`, `mcp.json`).
+-   **Fichiers de configuration racine** : `package.json`, `tailwind.config.js`, `tsconfig.json`, `vite.config.js`, etc.
 
-#### **Pouvoirs par Poste (Fixes)**
-*   **GK (Gardien)** : +2 DEF.
-*   **CB (Défenseur Central)** : +1 DEF.
-*   **LB / RB (Latéraux)** : +1 ATT / +1 DEF.
-*   **CDM (Milieu Déf.)** : +1 DEF.
-*   **CM (Milieu Central)** : +1 DEF à tous les alliés visibles.
-*   **CAM (Meneur)** : `MENEUR` (Effet JOUÉE : Permet une attaque immédiate avec un **AUTRE** joueur).
-*   **LM / RM (Milieux Lat.)** : +1 ATT.
-*   **LW / RW (Ailiers)** : +1 ATT.
-*   **ST (Buteur)** : +2 ATT.
+### Technologies Clés
 
-#### **Capacités Spéciales**
-*   **`MENEUR`** : Lorsqu'il est joué, permet d'effectuer une attaque immédiate avec un autre joueur déjà présent sur le terrain. Le Meneur lui-même ne peut pas attaquer durant ce tour bonus. Possibilité de passer l'action bonus.
-*   **`AGRESSIF`** : Si ce joueur perd un duel, la carte adverse qui a gagné le duel est également défaussée.
-*   **`BOOST1/2`** : Cartes utilisables depuis la main en défense (+1 ou +2 VAEP).
+Le projet est construit en utilisant les technologies modernes suivantes :
 
-#### **Résultats du Duel**
-*   **ATT > DEF (Victoire Attaque)** : Le défenseur est **retourné** (Momentum). L'attaquant reste.
-*   **ATT < DEF (Victoire Défense)** : L'attaquant est **défaussé**. Le défenseur reste et "nettoie" une de ses propres cartes retournées (si présente).
-*   **ATT = DEF (Match Nul)** : L'attaquant ET le défenseur sont **défaussés**.
+-   **React (avec TypeScript/TSX)** : La bibliothèque JavaScript pour construire l'interface utilisateur, avec TypeScript pour une meilleure robustesse du code.
+-   **Zustand** : Une solution de gestion d'état légère et flexible pour l'application.
+-   **Tailwind CSS** : Un framework CSS utility-first pour un stylisme rapide et personnalisable.
+-   **Framer Motion** : Une bibliothèque React pour des animations fluides et interactives (utilisée notamment pour les cartes et les effets visuels).
+-   **Vite** : Un outil de build rapide pour le développement front-end.
 
-### **5. Le But (⚽)**
-Un but est marqué par "But Ouvert" ou "Momentum" (3 cartes retournées).
-*   **Conséquence** : L'attaquant est défaussé, le défenseur défausse toutes ses cartes retournées. Engagement au joueur qui a encaissé.
+### Mots-clés des cartes et effets de poste (Synchronisation avec `src/core/engine/effectSystem.ts`)
 
----
+**Mots-clés :**
+- **AGRESSIF** : Si la carte est "AGRESSIF" et qu'un duel résulte en un match nul, un penalty est déclenché. Si elle perd un duel, elle élimine également l'adversaire (défausse mutuelle).
+- **BOOST1 / BOOST2** : Carte de boost offrant +1 / +2 VAEP respectivement lors d'un blocage.
 
-## **II. RÈGLES DE COMPORTEMENT DE L'IA**
+**Postes et leurs effets :**
+- **GK (Gardien)** : +2 en DEF lorsqu'il est en position de défenseur.
+- **ST (Attaquant de pointe)** : +2 en ATT lorsqu'il est en position d'attaquant.
+- **CB (Défenseur Central)** : +1 en DEF lorsqu'il est en position de défenseur.
+- **CDM (Milieu Défensif)** : +1 en DEF lorsqu'il est en position de défenseur.
+- **LB (Latéral Gauche) / RB (Latéral Droit)** : +1 en DEF lorsqu'il est en position de défenseur.
+- **LW (Ailier Gauche) / RW (Ailier Droit)** : +2 en ATT lorsqu'il est en position d'attaquant, si l'adversaire n'a pas de contre (LB, RB, LM, RM) sur le terrain.
+- **LM (Milieu Gauche) / RM (Milieu Droit)** : +1 en ATT lorsqu'il est en position d'attaquant.
+- **CAM (Milieu Offensif)** : En étant joué, permet à un attaquant non actionné (LW, RW, ST) de jouer une action supplémentaire durant le même tour (Meneur).
+- **CM (Milieu Central)** : Octroie +1 en DEF à un autre milieu de terrain (CDM, CM, CAM, LM, RM) présent sur le terrain en défense (Moteur CM).
 
-### **1. Playmaker / Meneur**
-*   L'IA utilise l'effet Meneur pour déclencher une attaque si elle a un avantage. Sinon, elle passe pour terminer son tour.
+## 3. Plan de Développement Actuel
 
-### **2. Absence de passage de tour générique**
-*   L'IA comprend qu'elle doit jouer une carte ou attaquer à chaque tour, sauf cas du Meneur.
+### Étape 1 : Expansion des Événements Exceptionnels
+- [ ] Implémenter l'animation et la logique de résolution pour le **CORNER**.
+- [ ] Implémenter l'animation et la logique de résolution pour le **FREE_KICK**.
+- [ ] Ajouter des probabilités de déclenchement pour ces événements lors d'un match nul.
+
+### Étape 2 : Amélioration de l'UI/UX
+- [ ] Ajouter des sons d'ambiance et de feedback d'action.
+- [ ] Optimiser l'affichage mobile (responsive).
+
+### Étape 3 : Système de Progression
+- [ ] Mise en place d'un système de niveaux d'utilisateur.
+- [ ] Défis quotidiens pour gagner des crédits.

@@ -30,8 +30,6 @@ const InspectionModal: React.FC<InspectionModalProps> = ({
   if (!inspectedCard) return null;
 
   const handleActionClick = (type: GameActionType) => {
-    // On exécute l'action directement. 
-    // La fonction onAction s'occupera de fermer la modale après avoir récupéré les données de la carte.
     onAction(type);
   };
 
@@ -68,7 +66,7 @@ const InspectionModal: React.FC<InspectionModalProps> = ({
                 <MdClose size={24} />
             </button>
 
-            <div className="w-64 md:w-72 aspect-[2/3] shadow-[0_0_100px_rgba(0,0,0,1)] pointer-events-auto">
+            <div className="w-64 md:w-72 aspect-[2/3] shadow-[0_0_100px_rgba(0,0,0,1)] pointer-events-auto rounded-2xl">
                 <Card 
                   data={inspectedCard.card} 
                   teamColor={inspectedCard.side === 'player' ? '#afff34' : '#ef4444'} 
@@ -77,26 +75,23 @@ const InspectionModal: React.FC<InspectionModalProps> = ({
                 />
             </div>
 
-            <div className="w-full flex flex-col gap-3 pointer-events-auto px-6">
-                <div className="flex gap-3 w-full justify-center">
-                    {actions.map((action, i) => (
-                        <button
-                          key={i}
-                          onClick={() => handleActionClick(action.type)}
-                          className={`${getActionButtonStyles(action.type)} flex-1 max-w-[140px] px-2 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-105 active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border border-white/20 shadow-2xl`}
-                        >
-                            {React.cloneElement(action.icon as React.ReactElement, { size: 20 })}
-                            {action.label}
-                        </button>
-                    ))}
+            {/* Actions Bar */}
+            {actions.length > 0 && (
+                <div className="w-full flex flex-col gap-3 pointer-events-auto px-6">
+                    <div className="flex gap-3 w-full justify-center">
+                        {actions.map((action, i) => (
+                            <button
+                            key={i}
+                            onClick={() => handleActionClick(action.type)}
+                            className={`${getActionButtonStyles(action.type)} flex-1 max-w-[140px] px-2 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-105 active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border border-white/20 shadow-2xl`}
+                            >
+                                {React.cloneElement(action.icon as React.ReactElement, { size: 20 })}
+                                {action.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                
-                {actions.length === 0 && (
-                  <button onClick={onClose} className="w-full bg-black/60 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] border border-white/10 backdrop-blur-md">
-                      {t('game.close')}
-                  </button>
-                )}
-            </div>
+            )}
         </motion.div>
     </motion.div>
   );

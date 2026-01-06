@@ -211,11 +211,11 @@
     "name": "Belgique",
     "color": "#E30613",
     "players": [
-      { "id": "bel_gk", "name": "K. Casteels", "pos": "GK", "vaep": 7, "cost": 0, "effects": ["BOOST1"] },
-      { "id": "bel_cb1", "name": "W. Faes", "pos": "CB", "vaep": 7, "cost": 0 },
+      { "id": "bel_gk", "name": "K. Casteels", "pos": "GK", "vaep": 7, "cost": 0, "effects": ["BOOST2"] },
+      { "id": "bel_cb1", "name": "W. Faes", "pos": "CB", "vaep": 7, "cost": 0, "effects": ["AGRESSIF"] },
       { "id": "bel_cb2", "name": "J. Vertonghen", "pos": "CB", "vaep": 7, "cost": 0, "effects": ["SOLIDAIRE"] },
       { "id": "bel_lb", "name": "A. Theate", "pos": "LB", "vaep": 7, "cost": 0 },
-      { "id": "bel_rb", "name": "T. Castagne", "pos": "RB", "vaep": 7, "cost": 0 },
+      { "id": "bel_rb", "name": "T. Castagne", "pos": "RB", "vaep": 7, "cost": 0, "effects": ["AGRESSIF"] },
       { "id": "bel_cdm", "name": "A. Onana", "pos": "CDM", "vaep": 8, "cost": 0, "effects": ["PHYSIQUE"] },
       { "id": "bel_cm", "name": "O. Mangala", "pos": "CM", "vaep": 7, "cost": 0 },
       { "id": "bel_cam", "name": "K. De Bruyne", "pos": "CAM", "vaep": 9, "cost": 0, "effects": ["VISION", "PASSEUR"] },
@@ -226,7 +226,7 @@
       { "id": "bel_sub2", "name": "L. Openda", "pos": "ST", "vaep": 7, "cost": 0, "effects": ["VITESSE"] },
       { "id": "bel_sub3", "name": "Y. Tielemans", "pos": "CM", "vaep": 7, "cost": 0 },
       { "id": "bel_sub4", "name": "Z. Debast", "pos": "CB", "vaep": 7, "cost": 0 },
-      { "id": "bel_sub5", "name": "M. Sels", "pos": "GK", "vaep": 7, "cost": 0 }
+      { "id": "bel_sub5", "name": "M. Sels", "pos": "GK", "vaep": 7, "cost": 0, "effects": ["BOOST1"] } 
     ]
   },
   {
@@ -239,7 +239,7 @@
       { "id": "mar_cb2", "name": "R. Saïss", "pos": "CB", "vaep": 7, "cost": 0, "effects": ["SOLIDAIRE"] },
       { "id": "mar_lb", "name": "N. Mazraoui", "pos": "LB", "vaep": 8, "cost": 0, "effects": ["TECHNIQUE"] },
       { "id": "mar_rb", "name": "A. Hakimi", "pos": "RB", "vaep": 9, "cost": 0, "effects": ["VITESSE", "BOOST1"] },
-      { "id": "mar_cdm", "name": "S. Amrabat", "pos": "CDM", "vaep": 8, "cost": 0, "effects": ["PHYSIQUE", "AGRESSIF"] },
+      { "id": "mar_cdm", "name": "S. Amrabat", "pos": "CDM", "vaep": 8, "cost": 0, "effects": ["AGRESSIF"] },
       { "id": "mar_cm", "name": "A. Ounahi", "pos": "CM", "vaep": 7, "cost": 0, "effects": ["TECHNIQUE"] },
       { "id": "mar_cam", "name": "B. Diaz", "pos": "CAM", "vaep": 8, "cost": 0, "effects": ["TECHNIQUE"] },
       { "id": "mar_lw", "name": "A. Ezzalzouli", "pos": "LW", "vaep": 7, "cost": 0 },
@@ -300,7 +300,7 @@
   },
   {
     "id": "japan",
-    "name": "Japon",
+    "name": "Japan",
     "color": "#00008B",
     "players": [
       { "id": "jap_gk", "name": "Z. Suzuki", "pos": "GK", "vaep": 7, "cost": 0, "effects": ["BOOST1"] },
