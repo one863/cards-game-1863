@@ -1,92 +1,56 @@
-import { useEffect, useRef } from 'react';
-import { useGameStore } from '../../stores/useGameStore';
-import { getAIDecision } from './logic/aiDecision';
-import { calculateTotalPowerBonus } from '../../core/engine/effectSystem';
-import { GameState, Player } from '../../types';
+const handleDefensivePhase = (state: GameState) => {
+  const attackerId = state.attackerInstanceId;
+  if (!attackerId) return;
+  
+  const attackerCard = state.player.field.find(c => c.instanceId === attackerId);
+  const blockers = state.opponent.field.filter((c: Player) => !c.isFlipped);
 
-const useAI = () => {
-  const gameState = useGameStore(state => state.gameState);
-  const handlePlayCard = useGameStore(state => state.handlePlayCard);
-  const handleAttack = useGameStore(state => state.handleAttack);
-  const handleBlock = useGameStore(state => state.handleBlock);
-  const handlePass = useGameStore(state => state.handlePass);
-  const addLog = useGameStore(state => state.addLog);
-  const setWinner = useGameStore(state => state.setWinner);
+  // Si aucun bloqueur ou pas d'attaquant valide, on passe
+  if (!blockers.length || !attackerCard) { 
+      handlePass('opponent', true);
+      return; 
+  }
 
-  const lastActionTime = useRef<number>(0);
-  const lastPhase = useRef<string>('');
-  const stuckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Calcul de la puissance d'attaque réelle (VAEP + Bonus)
+  const attPower = attackerCard.vaep + calculateTotalPowerBonus(state, attackerCard, 'player', 'attacker').bonus;
+  
+  // Évaluation de chaque bloqueur potentiel
+  const processedBlockers = blockers.map((b: Player) => ({
+    card: b,
+    power: b.vaep + calculateTotalPowerBonus(state, b, 'opponent', 'defender').bonus,
+    isAggressive: b.effects?.includes("AGRESSIF")
+  })).sort((a: any, b: any) => a.power - b.power);
 
-  const handleDefensivePhase = (state: GameState) => {
-    const attackerId = state.attackerInstanceId;
-    if (!attackerId) return;
-    const attackerCard = state.player.field.find(c => c.instanceId === attackerId);
-    const blockers = state.opponent.field.filter((c: Player) => !c.isFlipped);
+  // 1. STRATÉGIE : LE GAGNANT LE MOINS CHER
+  // On cherche la carte la plus faible capable de gagner ou de faire match nul.
+  const winnerBlocker = processedBlockers.find((b: any) => b.power >= attPower);
+  if (winnerBlocker) {
+      handleBlock(winnerBlocker.card.instanceId!);
+      return;
+  }
 
-    if (!blockers.length || !attackerCard) { 
-        handlePass('opponent', true);
-        return; 
-    }
+  // 2. STRATÉGIE : LE SACRIFICE UTILE (KAMIKAZE)
+  // Si on va perdre, on vérifie si on a un joueur "AGRESSIF". 
+  // Grâce à son effet, il sera éliminé MAIS il emportera l'attaquant adverse avec lui.
+  const aggressiveBlocker = processedBlockers.find((b: any) => b.isAggressive);
+  if (aggressiveBlocker) {
+      handleBlock(aggressiveBlocker.card.instanceId!);
+      return;
+  }
 
-    const attPower = attackerCard.vaep + calculateTotalPowerBonus(state, attackerCard, 'player', 'attacker').bonus;
-    const processedBlockers = blockers.map((b: Player) => ({
-      card: b,
-      power: b.vaep + calculateTotalPowerBonus(state, b, 'opponent', 'defender').bonus
-    })).sort((a: any, b: any) => a.power - b.power);
+  // 3. STRATÉGIE : LE "NO BLOCK" TACTIQUE (ANTI-MOMENTUM)
+  // Si on ne peut pas gagner et qu'on n'est pas agressif :
+  // Bloquer nous ferait juste "flipper" (retourner) une carte, nous rapprochant du Momentum Goal.
+  // Mieux vaut laisser passer l'attaque pour garder nos défenseurs actifs au prochain tour.
+  
+  const flippedCount = state.opponent.field.filter(c => c.isFlipped).length;
+  
+  // Si on a déjà des cartes retournées, on refuse catégoriquement de bloquer un duel perdu
+  if (flippedCount >= 1) {
+      handlePass('opponent', true); // true = passage en phase défensive
+      return;
+  }
 
-    const winnerBlocker = processedBlockers.find((b: any) => b.power >= attPower);
-    const finalBlocker = winnerBlocker || processedBlockers[0]; // Bloqueur le plus fort ou le premier si aucun ne gagne
-
-    handleBlock(finalBlocker.card.instanceId!); 
-  };
-
-  const handleMainPhase = (state: GameState) => {
-    const decision = getAIDecision(state);
-    
-    if (decision.action === 'PLAY') {
-      const cardToPlay = state.opponent.hand[decision.idx];
-      if (cardToPlay) {
-        handlePlayCard(decision.idx, 'opponent');
-      }
-    } else if (decision.action === 'ATTACK') {
-      if (decision.id) {
-        handleAttack(decision.id, 'opponent');
-      }
-    } else if (decision.action === 'PASS') {
-        handlePass('opponent');
-    }
-  };
-
-  useEffect(() => {
-    if (!gameState || gameState.winner || gameState.turn !== 'opponent') {
-        if (stuckTimer.current) clearTimeout(stuckTimer.current);
-        stuckTimer.current = null;
-        return;
-    }
-
-    const aiAction = () => {
-      const now = Date.now();
-      // Simple debounce pour éviter les actions multiples sur le même état/phase
-      if (gameState.phase === lastPhase.current && now - lastActionTime.current < 1000) return;
-      
-      if (stuckTimer.current) clearTimeout(stuckTimer.current);
-
-      lastActionTime.current = now;
-      lastPhase.current = gameState.phase;
-
-      if (gameState.phase === 'ATTACK_DECLARED') {
-        handleDefensivePhase(gameState);
-      } else if (gameState.phase === 'MAIN') {
-        handleMainPhase(gameState);
-      }
-    };
-    
-    stuckTimer.current = setTimeout(aiAction, 1000); // Délai pour l'action de l'IA
-
-    return () => {
-        if (stuckTimer.current) clearTimeout(stuckTimer.current);
-    };
-  }, [gameState?.turn, gameState?.phase, gameState?.attackerInstanceId, gameState?.player?.field.length, gameState?.opponent?.hand.length, gameState?.opponent?.field.length]);
+  // Par défaut, si le duel est perdu d'avance, on préserve la santé physique de nos joueurs.
+  handlePass('opponent', true);
 };
-
-export default useAI;
