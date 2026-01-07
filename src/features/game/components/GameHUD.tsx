@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MdLayers, MdDeleteSweep } from 'react-icons/md';
+import { MdLayers, MdDeleteSweep, MdLock } from 'react-icons/md';
 import { GameSide } from '../../../types';
 import { useLanguage } from '../../../app/LanguageContext';
+import { useGameStore } from '../../../stores/useGameStore';
 
 interface GameHUDProps {
   side: GameSide;
@@ -12,6 +13,10 @@ interface GameHUDProps {
 
 const GameHUD: React.FC<GameHUDProps> = ({ side, sideKey, isCurrentTurn }) => {
   const { t } = useLanguage();
+  const setDiscardOpen = useGameStore(state => state.setDiscardOpen);
+  const setDeckOpen = useGameStore(state => state.setDeckOpen);
+  const canViewDeck = useGameStore(state => state.canViewDeck);
+  
   const isPlayer = sideKey === 'player';
   const accentColor = isPlayer ? 'text-[#afff34]' : 'text-red-500';
   const borderColor = isCurrentTurn ? (isPlayer ? 'border-[#afff34]' : 'border-red-500') : 'border-white/10';
@@ -31,21 +36,38 @@ const GameHUD: React.FC<GameHUDProps> = ({ side, sideKey, isCurrentTurn }) => {
            </div>
       </div>
       <div className="flex items-center gap-6 min-w-[140px] justify-end">
-          {/* Deck Count - Agrandissement icône et texte */}
-          <div className="flex items-center gap-2">
-            <MdLayers className={`${accentColor} opacity-50`} size={18} />
+          {/* Deck Count (Clickable pour voir la pioche) */}
+          <motion.div 
+            className={`flex items-center gap-2 ${isPlayer ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+            onClick={() => isPlayer && setDeckOpen(true)}
+            whileHover={isPlayer ? { scale: 1.05 } : {}}
+            whileTap={isPlayer ? { scale: 0.95 } : {}}
+          >
+            <div className="relative">
+                <MdLayers className={`${accentColor} ${canViewDeck ? 'opacity-100' : 'opacity-50'}`} size={18} />
+                {!canViewDeck && isPlayer && (
+                    <div className="absolute -top-1 -right-1 bg-black rounded-full">
+                        <MdLock size={10} className="text-gray-400" />
+                    </div>
+                )}
+            </div>
             <span className="text-sm md:text-base font-mono font-black text-white/90 leading-none">
               {side.deck.length}
             </span>
-          </div>
+          </motion.div>
           
-          {/* Discard Count - Agrandissement icône et texte */}
-          <div className="flex items-center gap-2">
-            <MdDeleteSweep className="text-gray-500" size={20} />
-            <span className="text-sm md:text-base font-mono font-black text-gray-500 leading-none">
+          {/* Discard Count (Clickable pour le joueur) */}
+          <motion.div 
+            className={`flex items-center gap-2 ${isPlayer ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+            onClick={() => isPlayer && setDiscardOpen(true)}
+            whileHover={isPlayer ? { scale: 1.05 } : {}}
+            whileTap={isPlayer ? { scale: 0.95 } : {}}
+          >
+            <MdDeleteSweep className={`${isPlayer ? 'text-red-400' : 'text-gray-500'} transition-colors`} size={20} />
+            <span className={`text-sm md:text-base font-mono font-black ${isPlayer ? 'text-red-400' : 'text-gray-500'} leading-none`}>
               {side.discard.length}
             </span>
-          </div>
+          </motion.div>
       </div>
     </motion.div>
   );

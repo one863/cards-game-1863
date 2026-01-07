@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '../../stores/useGameStore';
 import { useLanguage } from '../../app/LanguageContext';
-import { getEffectValue, calculateTotalPowerBonus } from '../../core/engine/effectSystem'; // --- IMPORT MIS A JOUR ---
+import { getEffectValue, calculateTotalPowerBonus } from '../../core/engine/effectSystem';
 import useAI from '../../core/ai/useAI';
 import { Player } from '../../types';
 import { 
@@ -14,6 +14,8 @@ import {
     GameHUD, GameField, GameHand, 
     LogsModal, StatsModal, InspectionModal, PauseModal, MatchResultModal, VisualEffectsLayer, LogMessage 
 } from './components';
+import DiscardPileModal from './components/DiscardPileModal';
+import DeckPileModal from './components/DeckPileModal'; // --- NOUVEAU IMPORT ---
 
 import { useGameInteraction } from './useGameInteraction';
 
@@ -90,17 +92,12 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
       setShowResultOverlay(false);
   };
 
-  // --- OPTIMISATION : Utilisation du nouveau calculateTotalPowerBonus ---
   const getVisualBonus = (card: Player, side: 'player' | 'opponent') => {
     if (!gameState || card.isFlipped) return 0;
     const phase = gameState.phase;
     let isAttackingSide = (phase === 'MAIN' && gameState.turn === side) || (phase === 'ATTACK_DECLARED' && gameState.turn !== side);
-    
-    // Calcul de base via le système d'effets
     let details = calculateTotalPowerBonus(gameState, card, side, isAttackingSide ? 'attacker' : 'defender');
     let total = details.bonus;
-
-    // Ajout spécifique des boosts en main lors d'une défense du joueur
     if (side === 'player' && phase === 'ATTACK_DECLARED' && selectedBoostId) {
             const boostCard = gameState.player.hand.find(c => c.instanceId === selectedBoostId);
             if (boostCard) {
@@ -174,6 +171,11 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
           )}
           <button onClick={() => setShowPauseMenu(true)} className="text-white/40 hover:text-red-500 transition-colors p-2"><MdExitToApp size={24} /></button>
       </div>
+      
+      {/* Modales de Piles */}
+      <DiscardPileModal /> 
+      <DeckPileModal />
+
       <AnimatePresence>
           {showLogModal && <LogsModal key="logs-modal" isOpen={showLogModal} onClose={() => setShowLogModal(false)} logs={gameState.log} copyLogs={copyLogs} logsCopied={logsCopied} />}
           {showStatsModal && <StatsModal key="stats-modal" isOpen={showStatsModal} onClose={() => setShowStatsModal(false)} player={gameState.player} opponent={gameState.opponent} goals={gameState.goals} />}

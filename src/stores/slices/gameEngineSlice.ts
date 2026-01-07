@@ -19,11 +19,16 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
   
   const internalCheckGameOver = (draft: GameState, forced: boolean, addLog: (d: GameState, k: string, p?: any) => void) => {
     if (!draft || !draft.player || !draft.opponent) return false; 
-    const isPlayerOut = draft.player.hand.length === 0 && draft.player.deck.length === 0 && draft.player.field.filter(c => !c.isFlipped).length <= 1;
-    const isOpponentOut = draft.opponent.hand.length === 0 && draft.opponent.deck.length === 0 && draft.opponent.field.filter(c => !c.isFlipped).length <= 1;
-    const isOutOfCards = isPlayerOut && isOpponentOut;
     
-    if (forced || isOutOfCards || draft.player.score >= 10 || draft.opponent.score >= 10) {
+    const isOutOfResources = (side: any) => 
+        side.hand.length === 0 && 
+        side.deck.length === 0 && 
+        side.field.filter((c: any) => !c.isFlipped).length <= 1;
+
+    const isPlayerOut = isOutOfResources(draft.player);
+    const isOpponentOut = isOutOfResources(draft.opponent);
+    
+    if (forced || (isPlayerOut && isOpponentOut) || draft.player.score >= 10 || draft.opponent.score >= 10) {
         if (draft.player.score > draft.opponent.score) draft.winner = 'player';
         else if (draft.player.score < draft.opponent.score) draft.winner = 'opponent';
         else draft.winner = 'draw';
@@ -43,8 +48,10 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
 
       const shuffle = (arr: Player[]) => [...arr].sort(() => Math.random() - 0.5);
       const mapToInstance = (p: Player) => ({ ...p, instanceId: `${p.id}_${Math.random().toString(36).substr(2, 5)}`, hasActed: false, isFlipped: false });
+      
       const pDeckTotal = shuffle([...finalPlayerDeckSource]).map(mapToInstance);
       const oDeckTotal = shuffle([...finalOpponentDeckSource]).map(mapToInstance);
+      
       const playerHandSize = Math.min(GAME_RULES.HAND_SIZE, pDeckTotal.length);
       const opponentHandSize = Math.min(GAME_RULES.HAND_SIZE, oDeckTotal.length);
 
@@ -52,24 +59,34 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
         isFriendly: !!playerDeckInput, 
         player: { deck: pDeckTotal, hand: pDeckTotal.splice(0, playerHandSize), field: [], discard: [], score: 0, teamName: teamNames.player },
         opponent: { deck: oDeckTotal, hand: oDeckTotal.splice(0, opponentHandSize), field: [], discard: [], score: 0, teamName: teamNames.opponent },
-        turn: 'player', phase: 'MAIN',
-        log: [{ key: 'logs.start', params: {}, id: Math.random() }],
+        turn: 'player', 
+        phase: 'MAIN',
+        log: [], 
         goals: [], goalEvent: null, winner: null, hasActionUsed: false, stoppageTimeAction: null, meneurActive: false
       };
       set({ selectedAttackerId: null, selectedBoostId: null, gameState: initialGameState });
-      set(produce((state: FullGameStore) => { if (state.gameState) get().startTurn(state.gameState); }));
+      set(produce((state: FullGameStore) => {
+          if (state.gameState) {
+              get().addLog(state.gameState, 'logs.match_start', { playerTeam: initialGameState.player.teamName, opponentTeam: initialGameState.opponent.teamName });
+              get().startTurn(state.gameState);
+          }
+      }));
     },
 
     startTurn: (draft) => {
       if (!draft || !draft.player || !draft.opponent) return; 
       if (draft.stoppageTimeAction) { internalCheckGameOver(draft, true, get().addLog); return; }
+      
       const activeSideKey = draft.turn;
       const activeSide = draft[activeSideKey];
       if (!activeSide) return;
+
       activeSide.field.forEach(card => { if (card) card.hasActed = false; }); 
+      
       while (activeSide.hand.length < GAME_RULES.HAND_SIZE && activeSide.deck.length > 0) {
           activeSide.hand.push(activeSide.deck.pop()!);
       }
+
       const activeNonFlippedCount = activeSide.field.filter(c => c && !c.isFlipped).length; 
       if (activeSide.hand.length === 0 && activeSide.deck.length === 0 && activeNonFlippedCount <= 1) {
           get().addLog(draft, 'logs.stoppage_time');
@@ -80,6 +97,7 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
           draft.hasActionUsed = false;
           return;
       }
+
       draft.hasActionUsed = false;
       draft.phase = 'MAIN';
       get().addLog(draft, activeSideKey === 'player' ? 'logs.your_turn' : 'logs.opp_turn');
@@ -90,19 +108,35 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
       const attackerSide = draft[attackerSideKey];
       const defenderSide = draft[defenderSideKey];
       if (!attackerSide || !defenderSide) return; 
+
       attackerSide.score++;
+      console.log(`Goal Resolved: ${attackerSideKey} score is now ${attackerSide.score}`);
       get().addLog(draft, 'game.score_log', { home: draft.player.score, away: draft.opponent.score });
+      
       const scorerName = attackerSide.field.find(c => c && c.instanceId === attackerId)?.name || 'Unknown'; 
       draft.goals.push({ scorerSide: attackerSideKey, scorerName, reason, timestamp: Date.now() });
       draft.goalEvent = { type: 'goal', scorer: attackerSideKey, scorerName, reason };
+
+      // L'ATTAQUANT (BUTEUR) EST DÉFAUSSÉ
       const attIdx = attackerSide.field.findIndex(c => c && c.instanceId === attackerId); 
       if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
+
+      // LES CARTES RETOURNÉES DU DÉFENSEUR SONT DÉFAUSSÉES
       defenderSide.field.forEach(c => { if (c && c.isFlipped) defenderSide.discard.push(c); }); 
       defenderSide.field = defenderSide.field.filter(c => c && !c.isFlipped);
+
       if (internalCheckGameOver(draft, false, get().addLog)) return;
+
+      // RESET COMPLET DE L'ÉTAT
       draft.phase = 'MAIN';
       draft.attackerInstanceId = null;
-      if (!draft.stoppageTimeAction) draft.turn = defenderSideKey; 
+      draft.exceptionalEvent = null; // Important pour éviter les boucles
+      draft.penaltyEvent = null;
+
+      if (!draft.stoppageTimeAction) {
+          draft.turn = defenderSideKey; 
+          // startTurn sera appelé par le prochain cycle ou resumeGame
+      }
     },
 
     resumeGame: () => {
@@ -110,76 +144,72 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
             const draft = state.gameState;
             if (!draft) return;
             
-            // --- GESTION DES ÉVÉNEMENTS EXCEPTIONNELS (PENALTY, CORNER, ETC.) ---
             const event = draft.exceptionalEvent;
             if (event) {
-                const defenderType = draft.turn;
+                const defenderType = draft.turn; // Dans un duel, le turn appartient au défenseur (ATTACK_DECLARED)
                 const attackerType = defenderType === 'player' ? 'opponent' : 'player';
                 const attackerSide = draft[attackerType];
                 const defenderSide = draft[defenderType];
+                
+                const attackerId = (event as any).attackerId || draft.attackerInstanceId;
+
+                console.log(`Resuming Exceptional Event: ${event.type}, Result: ${event.result}`);
 
                 if (event.type === 'PENALTY') {
                     if (event.result === 'goal') {
                         get().addLog(draft, 'logs.penalty_goal', { player: event.attackerName });
-                        get().resolveGoal(draft, attackerType, defenderType, draft.attackerInstanceId!, "logs.penalty_goal");
+                        
+                        // Défausse EXPLICITE du défenseur fautif (Faute)
+                        const defIdx = defenderSide.field.findIndex(c => c.name === event.defenderName);
+                        if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
+
+                        if (attackerId) {
+                            get().resolveGoal(draft, attackerType, defenderType, attackerId, "logs.penalty_goal");
+                        } else {
+                            console.error("Penalty Error: No attackerInstanceId found");
+                            draft.phase = 'MAIN';
+                            draft.turn = defenderType;
+                            get().startTurn(draft);
+                        }
                     } else {
-                        get().addLog(draft, 'logs.penalty_saved', { player: event.defenderName });
-                        // Défausse de l'attaquant et du défenseur agressif après l'arrêt
-                        const attIdx = attackerSide.field.findIndex(c => c.instanceId === draft.attackerInstanceId);
-                        if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
+                        // Log générique "Arrêté par le gardien"
+                        get().addLog(draft, 'logs.penalty_saved_gk');
+                        
+                        // DÉFAUSSE MUTUELLE (Neutralisation)
+                        if (attackerId) {
+                            const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
+                            if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
+                        }
                         
                         const defIdx = defenderSide.field.findIndex(c => c.name === event.defenderName);
                         if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
                         
+                        // Nettoyage et changement de tour
                         draft.phase = 'MAIN';
                         draft.attackerInstanceId = null;
-                        draft.turn = defenderType;
+                        draft.turn = defenderType; // Le défenseur reprend la main
                         draft.hasActionUsed = false;
+                        
+                        // Nettoyage explicite des événements
+                        draft.exceptionalEvent = null;
+                        draft.penaltyEvent = null;
+
                         get().startTurn(draft);
                     }
                 } 
                 else if (event.type === 'CORNER' || event.type === 'FREE_KICK') {
-                    // Logique pour Corner / Coup Franc (à implémenter plus tard)
                     get().addLog(draft, `logs.${event.type.toLowerCase()}_result`, { player: event.attackerName });
                     draft.phase = 'MAIN';
                     draft.attackerInstanceId = null;
                     draft.turn = defenderType;
                     draft.hasActionUsed = false;
+                    draft.exceptionalEvent = null;
                     get().startTurn(draft);
                 }
-
-                draft.exceptionalEvent = null;
-                draft.penaltyEvent = null; // Nettoyage compatibilité
                 return;
             }
 
-            // Fallback pour l'ancien penaltyEvent si exceptionalEvent est vide (sécurité)
-            if (draft.penaltyEvent?.active) {
-                const penalty = draft.penaltyEvent;
-                const defenderType = draft.turn;
-                const attackerType = defenderType === 'player' ? 'opponent' : 'player';
-                const attackerSide = draft[attackerType];
-                const defenderSide = draft[defenderType];
-                
-                if (penalty.result === 'goal') {
-                    get().addLog(draft, 'logs.penalty_goal', { player: penalty.attackerName });
-                    get().resolveGoal(draft, attackerType, defenderType, draft.attackerInstanceId!, "logs.penalty_goal");
-                } else {
-                    get().addLog(draft, 'logs.penalty_saved', { player: penalty.defenderName });
-                    const attIdx = attackerSide.field.findIndex(c => c.instanceId === draft.attackerInstanceId);
-                    if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
-                    const defIdx = defenderSide.field.findIndex(c => c.name === penalty.defenderName);
-                    if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
-                    draft.phase = 'MAIN';
-                    draft.attackerInstanceId = null;
-                    draft.turn = defenderType;
-                    draft.hasActionUsed = false;
-                    get().startTurn(draft);
-                }
-                draft.penaltyEvent = null;
-                return;
-            }
-
+            // Cas standard (Goal Animation finie, etc.)
             draft.goalEvent = null;
             if (draft.winner) return;
             if (draft.stoppageTimeAction) internalCheckGameOver(draft, true, get().addLog);
@@ -193,11 +223,13 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
           const side = draft[sideKey];
           if (!side || !side.field) return false; 
           
-          if (side.field.filter(c => c && c.isFlipped).length >= 3) {
+          if (side.field.filter(c => c && c.isFlipped).length >= GAME_RULES.MOMENTUM_THRESHOLD) {
               const attackerSideKey = sideKey === 'player' ? 'opponent' : 'player';
               const attackerSide = draft[attackerSideKey];
-              const attackerId = draft.attackerInstanceId || (attackerSide && attackerSide.field && attackerSide.field[0]?.instanceId);
+              const attackerId = draft.attackerInstanceId || (attackerSide?.field?.find(c => !c.isFlipped)?.instanceId);
               if (attackerId) {
+                const losingTeamName = draft[sideKey].teamName;
+                get().addLog(draft, 'logs.goal_momentum_pressure', { teamName: losingTeamName });
                 get().resolveGoal(draft, attackerSideKey, sideKey, attackerId, "logs.goal_momentum");
                 return true;
               }

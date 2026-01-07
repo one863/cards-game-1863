@@ -3,14 +3,14 @@ import { useGameStore } from '../../../stores/useGameStore';
 import ExplosionAnimation from '../../../components/ui/ExplosionAnimation';
 import BoostAnimation from '../../../components/ui/BoostAnimation';
 import GoalAnimation from '../../../components/ui/GoalAnimation';
-import PenaltyAnimation from '../../../components/ui/PenaltyAnimation'; // --- NOUVEL IMPORT ---
+import PenaltyAnimation from '../../../components/ui/PenaltyAnimation'; 
 
 interface VisualEffectsLayerProps {
   onResumeGame: () => void;
 }
 
 const VisualEffectsLayer: React.FC<VisualEffectsLayerProps> = ({ onResumeGame }) => {
-  const { gameState, clearExplosion, clearBoost, clearPenalty } = useGameStore();
+  const { gameState, clearExplosion, clearBoost } = useGameStore();
 
   if (!gameState) return null;
 
@@ -45,12 +45,13 @@ const VisualEffectsLayer: React.FC<VisualEffectsLayerProps> = ({ onResumeGame })
       )}
 
       {/* 4. Penalty Animation */}
+      {/* Correction critique : Appel de onResumeGame au lieu de clearPenalty pour déclencher la logique de résolution */}
       {gameState.penaltyEvent?.active && gameState.penaltyEvent.result && (
           <PenaltyAnimation 
               attackerName={gameState.penaltyEvent.attackerName}
               defenderName={gameState.penaltyEvent.defenderName}
               result={gameState.penaltyEvent.result}
-              onComplete={clearPenalty}
+              onComplete={onResumeGame}
           />
       )}
     </>

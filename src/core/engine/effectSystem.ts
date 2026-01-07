@@ -81,11 +81,10 @@ export const CARD_EFFECTS: Record<string, EffectDefinition> = {
       if (!gameState || !card) return;
       const side = gameState[ownerSide];
       if (side && side.field) {
-          // --- RECTIFICATION : Cibles limitées à LW, RW, ST ---
           const validAttackers = side.field.filter(c => 
               c && 
               c.instanceId !== card.instanceId && 
-              CAM_TARGET_POSITIONS.includes(c.pos) && // Filtre de poste
+              CAM_TARGET_POSITIONS.includes(c.pos) && 
               !c.isFlipped && 
               !c.hasActed
           );
@@ -122,6 +121,7 @@ export const calculateTotalPowerBonus = (
     const labels: string[] = [];
     const context: EffectContext = { gameState, card, ownerSide, addLog: () => {} };
 
+    // 1. EFFETS DE CARTE & POSTES
     getCardEffects(card).forEach(name => {
         const def = CARD_EFFECTS[name];
         if (def && def.getPowerBonus) {
@@ -136,6 +136,7 @@ export const calculateTotalPowerBonus = (
 
     const sideData = gameState[ownerSide];
     if (sideData && sideData.field) {
+        // 2. MOTEUR CM (+1 DEF pour les milieux)
         const hasActiveCMMate = sideData.field.some(p => p && p.instanceId !== card.instanceId && p.pos === 'CM' && !p.isFlipped);
         const isMidfielder = MIDFIELD_POSITIONS.includes(card.pos);
         if (situation === 'defender' && hasActiveCMMate && isMidfielder) {

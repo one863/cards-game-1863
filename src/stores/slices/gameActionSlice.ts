@@ -15,7 +15,7 @@ export interface GameActionSlice {
   clearExplosion: () => void;
   clearBoost: () => void;
   clearPenalty: () => void; 
-  clearExceptionalEvent: () => void; // --- NOUVEAU ---
+  clearExceptionalEvent: () => void; 
 }
 
 type FullGameStore = GameStatusSlice & GameEngineSlice & GameActionSlice;
@@ -114,17 +114,36 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
         set(produce((state: FullGameStore) => {
             const draft = state.gameState;
             if (!draft || draft.winner || draft.turn !== playerType) return;
-            const canPass = force || draft.meneurActive || draft.stoppageTimeAction === playerType || draft.phase === 'ATTACK_DECLARED';
-            if (!canPass) return;
 
-            if (draft.phase === 'ATTACK_DECLARED' && draft.attackerInstanceId) {
-                 const AttackerType = playerType === 'player' ? 'opponent' : 'player';
-                 get().addLog(draft, 'logs.goal_open');
-                 get().resolveGoal(draft, AttackerType, playerType, draft.attackerInstanceId, "logs.goal_open");
-                 return;
+            const activePlayerSide = draft[playerType];
+            const hasBlockersAvailable = activePlayerSide.field.some(c => !c.isFlipped);
+
+            if (draft.phase === 'ATTACK_DECLARED') {
+                if (hasBlockersAvailable && !force) {
+                    get().addLog(draft, 'logs.must_block');
+                    return;
+                }
+                
+                if (draft.attackerInstanceId) {
+                    const AttackerType = playerType === 'player' ? 'opponent' : 'player';
+                    get().addLog(draft, 'logs.goal_open');
+                    get().resolveGoal(draft, AttackerType, playerType, draft.attackerInstanceId, "logs.goal_open");
+                    return;
+                }
             }
+
+            // CORRECTION : Autoriser le PASS si meneurActive est vrai (Passer l'action bonus)
+            const canPass = force || draft.stoppageTimeAction === playerType || draft.meneurActive;
+            
+            if (!canPass) {
+                get().addLog(draft, 'logs.no_pass_allowed'); 
+                return;
+            }
+
             draft.meneurActive = false;
-            get().addLog(draft, 'logs.pass_turn', { side: getSideKey(playerType) });
+            // Si c'était une action Meneur qu'on a passée, on log différemment ?
+            // get().addLog(draft, 'logs.pass_turn', { side: getSideKey(playerType) }); // Gardons le log standard pour l'instant
+            
             draft.turn = playerType === 'player' ? 'opponent' : 'player';
             draft.phase = 'MAIN';
             get().startTurn(draft);
@@ -213,21 +232,11 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
           } 
           else {
               get().addLog(draft, 'logs.duel_outcome_draw', { attacker: attackerCard.name, defender: blockerCard.name });
-              
-              // --- LOGIQUE ÉVÉNEMENTS EXCEPTIONNELS EN CAS D'ÉGALITÉ ---
               let selectedEvent: ExceptionalEventType = null;
-
-              // 1. Priorité au Penalty si "AGRESSIF" (Événement exceptionnel n°1)
-              if (blockerCard.effects?.includes("AGRESSIF")) {
+              const isBlockerAggressive = blockerCard.effects?.includes("AGRESSIF");
+              if (isBlockerAggressive) {
                   selectedEvent = 'PENALTY';
               } 
-              // 2. Futurs événements (Corner, Coup franc) peuvent être ajoutés ici
-              /* 
-              else if (Math.random() < 0.2) {
-                  selectedEvent = 'CORNER';
-              }
-              */
-
               if (selectedEvent) {
                   const result = selectedEvent === 'PENALTY' ? (Math.random() < 0.7 ? 'goal' : 'saved') : 'success';
                   
@@ -236,10 +245,10 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                       attackerName: attackerCard.name,
                       defenderName: blockerCard.name,
                       result: result as any,
-                      timestamp: Date.now()
+                      timestamp: Date.now(),
+                      attackerId: attackerId
                   };
                   
-                  // On garde aussi penaltyEvent pour la compatibilité avec l'UI actuelle si besoin
                   if (selectedEvent === 'PENALTY') {
                       draft.penaltyEvent = {
                           active: true,
@@ -248,20 +257,17 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                           result: result as any,
                           timestamp: Date.now()
                       };
-                      get().addLog(draft, 'logs.penalty_trigger', { player: blockerCard.name });
+                      get().addLog(draft, 'logs.penalty_trigger_defender', { player: blockerCard.name });
                   } else {
                       get().addLog(draft, `logs.${selectedEvent.toLowerCase()}_trigger`, { player: blockerCard.name });
                   }
               } else {
-                  // Défausse mutuelle classique (Si aucun événement exceptionnel)
                   const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
                   if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
                   const defIdx = defenderSide.field.findIndex(c => c.instanceId === blockerId);
                   if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
-                  
                   triggerEffects('onDuelResolve', draft, attackerCard, AttackerType, addLogWrapper, ['DRAW', blockerCard]);
                   triggerEffects('onDuelResolve', draft, blockerCard, DefenderType, addLogWrapper, ['DRAW', attackerCard]);
-                  
                   draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
               }
           }
