@@ -1,6 +1,6 @@
 import React from 'react';
-import { useLanguage } from '../../../app/LanguageContext'; // Corrigé (3 niveaux)
-import { GameLog } from '../../../types'; // Corrigé (3 niveaux)
+import { useLanguage } from '@/app/LanguageContext'; // Corrigé (3 niveaux)
+import { GameLog } from '@/types'; // Corrigé (3 niveaux)
 
 interface LogMessageProps {
   logKey: string;

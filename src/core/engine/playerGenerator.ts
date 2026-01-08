@@ -1,5 +1,5 @@
 // src/core/engine/playerGenerator.ts
-import { Player, Position } from '../../types';
+import { Player, Position } from '@/types';
 
 const FIRST_NAMES = ["Leo", "Cristiano", "Kylian", "Erling", "Kevin", "Luka", "Vinicius", "Jude", "Harry", "Mohamed", "Antoine", "Zinedine", "Thierry", "Didier", "Michel", "David", "Andres", "Xavi", "Iker", "Manuel"];
 const LAST_NAMES = ["Messi", "Ronaldo", "Mbappé", "Haaland", "De Bruyne", "Modric", "Junior", "Bellingham", "Kane", "Salah", "Griezmann", "Zidane", "Henry", "Deschamps", "Platini", "Beckham", "Iniesta", "Alonso", "Casillas", "Neuer"];

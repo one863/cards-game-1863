@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useGameStore } from '../../stores/useGameStore';
-import { useLanguage } from '../../app/LanguageContext';
-import NATIONAL_TEAMS from '../../data/national_teams.json';
-import { Player } from '../../types';
+import { useGameStore } from '@/stores/useGameStore';
+import { useLanguage } from '@/app/LanguageContext';
+import NATIONAL_TEAMS from '@/data/national_teams.json';
+import { Player } from '@/types';
 import { MdClose, MdSportsSoccer, MdFlashOn } from 'react-icons/md';
 
 interface TeamSelectionProps {

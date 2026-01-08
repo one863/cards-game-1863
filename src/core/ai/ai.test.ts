@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getAIDecision } from './logic/aiDecision';
-import { GameState, Player } from '../../types';
+import { GameState, Player } from '@/types';
 
 // Helper pour créer un joueur fictif
 const createPlayer = (id: string, name: string, vaep: number, pos: string, isFlipped = false, hasActed = false): Player => ({

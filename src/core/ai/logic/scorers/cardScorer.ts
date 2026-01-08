@@ -1,5 +1,5 @@
-import { GameState, Player } from '../../../../types';
-import { AI_CONFIG } from '../../aiConfig';
+import { GameState, Player } from '@/types';
+import { AI_CONFIG } from '@/core/ai/aiConfig';
 
 /**
  * Évalue le poids tactique d'une carte en main ou sur le terrain.

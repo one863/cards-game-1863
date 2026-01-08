@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { MdClose, MdContentCopy, MdCheck } from 'react-icons/md';
-import { GameLog } from '../../../types';
-import { useLanguage } from '../../../app/LanguageContext';
+import { GameLog } from '@/types';
+import { useLanguage } from '@/app/LanguageContext';
 import LogMessage from './LogMessage';
 
 interface LogsModalProps {

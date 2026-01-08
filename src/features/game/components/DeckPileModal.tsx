@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useGameStore } from '../../../stores/useGameStore';
-import { useLanguage } from '../../../app/LanguageContext';
-import MiniCard from '../../../components/card/MiniCard';
+import { useGameStore } from '@/stores/useGameStore';
+import { useLanguage } from '@/app/LanguageContext';
+import MiniCard from '@/components/card/MiniCard';
 import { MdClose, MdVisibility, MdLock, MdLayers } from 'react-icons/md';
 
 const DeckPileModal: React.FC = () => {
@@ -23,7 +23,7 @@ const DeckPileModal: React.FC = () => {
         animate={{ y: 0 }} 
         exit={{ y: '100%' }} 
         transition={{ type: 'spring', damping: 25 }} 
-        className="absolute inset-0 bg-black/80 backdrop-blur-xl z-[120] flex flex-col"
+        className="absolute inset-0 bg-black/40 backdrop-blur-3xl z-[120] flex flex-col"
       >
         {/* Header */}
         <div className="p-6 border-b border-white/10 flex justify-between items-center pt-10 bg-black/20">

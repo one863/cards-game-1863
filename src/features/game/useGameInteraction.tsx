@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Player, GameState } from '../../types';
+import { Player, GameState } from '@/types';
 import { GameActionType } from './components/InspectionModal';
-import { useLanguage } from '../../app/LanguageContext';
+import { useLanguage } from '@/app/LanguageContext';
 import { MdArrowUpward, MdShield, MdFlashOn } from 'react-icons/md';
 import React from 'react';
 
@@ -11,8 +11,8 @@ interface UseGameInteractionResult {
   onCardClick: (card: Player, side: 'player' | 'opponent', zone: 'hand' | 'field', idx: number) => void;
   inspectionActions: { type: GameActionType; label: string; icon: React.ReactNode }[];
   executeAction: (actionType: GameActionType) => void;
-  onDragStart: (event: React.DragEvent, card: Player, cardIndex: number) => void; // --- NOUVEAU ---
-  onDropCard: (dropFieldIndex: number) => void; // --- NOUVEAU ---
+  onDragStart: (event: React.DragEvent, card: Player, cardIndex: number) => void; 
+  onDropCard: (dropFieldIndex: number) => void; 
 }
 
 export const useGameInteraction = (
@@ -33,7 +33,6 @@ export const useGameInteraction = (
     idx: number 
   } | null>(null);
   
-  // --- ETAT POUR LE GLISSER-DÉPOSER ---
   const [draggedCardIndex, setDraggedCardIndex] = useState<number | null>(null);
 
   const onCardClick = (card: Player, side: 'player' | 'opponent', zone: 'hand' | 'field', idx: number) => {
@@ -85,40 +84,33 @@ export const useGameInteraction = (
           actions.push({ type: 'BLOCK', label: t('game.block') || 'BLOQUER', icon: <MdShield /> });
       }
       else if (zone === 'hand' && phase === 'ATTACK_DECLARED' && turn === 'player') {
-          actions.push({ type: 'BOOST', label: t('game.boost') || 'BOOST', icon: <MdFlashOn /> });
+          // CONDITION : Seulement si la carte possède le mot-clé BOOST
+          const isBoostCard = card.effects?.some(eff => eff === 'BOOST1' || eff === 'BOOST2');
+          if (isBoostCard) {
+              actions.push({ type: 'BOOST', label: t('game.boost') || 'BOOST', icon: <MdFlashOn /> });
+          }
       }
       
       return actions;
   }, [inspectedCard, gameState, t]);
 
-  // --- LOGIQUE GLISSER-DÉPOSER ---
   const onDragStart = (event: React.DragEvent, card: Player, cardIndex: number) => {
     if (!gameState || gameState.winner || gameState.turn !== 'player' || gameState.phase !== 'MAIN') return;
     
-    // Vérifie si le joueur peut réellement poser une carte
-    if (gameState.player.field.length >= GAME_RULES.FIELD_SIZE) {
-        console.log("Cannot drag: Field is full."); // Feedback
+    if (gameState.player.field.length >= 5) { // Utilisation d'une constante brute ou GAME_RULES si dispo
         event.preventDefault();
         return;
     }
 
     event.dataTransfer.setData("text/plain", String(cardIndex));
     setDraggedCardIndex(cardIndex);
-    // Optionnel: Ajouter une classe pour un effet visuel sur la carte déplacée
   };
 
   const onDropCard = (dropFieldIndex: number) => {
     if (!gameState || draggedCardIndex === null) return;
 
-    // Vérifie si le slot est vide et que c'est le tour du joueur
-    if (gameState.player.field[dropFieldIndex]) {
-        console.log("Cannot drop: Slot is occupied.");
-        return;
-    }
-    if (gameState.player.field.length >= GAME_RULES.FIELD_SIZE) {
-        console.log("Cannot drop: Field is full.");
-        return;
-    }
+    if (gameState.player.field[dropFieldIndex]) return;
+    if (gameState.player.field.length >= 5) return;
 
     handlePlayCard(draggedCardIndex);
     setDraggedCardIndex(null);

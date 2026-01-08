@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { MdClose } from 'react-icons/md';
-import { useLanguage } from '../../../app/LanguageContext';
+import { useLanguage } from '@/app/LanguageContext';
 
 interface StatsModalProps {
   isOpen: boolean;

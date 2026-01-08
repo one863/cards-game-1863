@@ -1,6 +1,6 @@
-import { GAME_RULES } from '../core/rules/settings';
-import { generateTeam } from '../core/engine/playerGenerator';
-import { Player } from '../types';
+import { GAME_RULES } from '@/core/rules/settings';
+import { generateTeam } from '@/core/engine/playerGenerator';
+import { Player } from '@/types';
 
 /**
  * Génère un deck valide

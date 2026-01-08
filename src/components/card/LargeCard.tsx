@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Player } from '../../types'; // Corrigé (2 niveaux)
-import { useLanguage } from '../../app/LanguageContext'; // Corrigé (2 niveaux)
+import { Player } from '@/types'; 
+import { useLanguage } from '@/app/LanguageContext'; 
 
 interface LargeCardProps {
   data: Player;
@@ -17,9 +17,10 @@ const LargeCard: React.FC<LargeCardProps> = React.memo(({
   const { t } = useLanguage();
 
   const getKeywordIcon = (keyword: string) => {
-      if (keyword.startsWith("BOOST")) return "⚡";
-      if (keyword === "MENEUR") return "⭐";
+      if (!keyword) return null;
+      if (keyword === "BOOST1" || keyword === "BOOST2") return "⚡";
       if (keyword === "AGRESSIF") return "💀";
+      if (keyword === "POSSESSION") return "⭐";
       return "•";
   };
 
@@ -63,10 +64,12 @@ const LargeCard: React.FC<LargeCardProps> = React.memo(({
               <div className="bg-black/80 backdrop-blur-md flex flex-col justify-center shrink-0 p-4 gap-3 border-t border-white/10 relative z-10">
                  <div className="space-y-2">
                     <div className="flex flex-col border-l-4 pl-4 py-1.5 bg-white/5 rounded-r-lg" style={{ borderLeftColor: teamColor }}>
-                       <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: teamColor }}>{t(`pos.${data.pos}`)}</span>
+                       <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: teamColor }}>{t(`pos.${data.pos}`)}</span>
+                       </div>
                        <span className="text-[11px] text-white/80 leading-tight font-medium">{t(`pos.${data.pos}_desc`)}</span>
                     </div>
-                    {data.effects?.map((eff, i) => (
+                    {data.effects?.filter(eff => !!eff && eff !== "").map((eff, i) => (
                       <div key={i} className="flex flex-col border-l-4 border-white/20 pl-4 py-1.5 bg-white/5 rounded-r-lg">
                          <span className="text-[11px] font-black text-white uppercase tracking-widest flex items-center gap-2">
                            <span>{getKeywordIcon(eff)}</span>{t(`keywords.${eff}`)}

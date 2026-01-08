@@ -2,9 +2,9 @@ import { StateCreator } from 'zustand';
 import { produce } from 'immer';
 import { GameStatusSlice } from './gameStatusSlice';
 import { GameEngineSlice } from './gameEngineSlice';
-import { GAME_RULES } from '../../core/rules/settings';
-import { GameState, ExceptionalEventType } from '../../types';
-import { triggerEffects, getEffectValue, calculateTotalPowerBonus } from '../../core/engine/effectSystem';
+import { GAME_RULES } from '@/core/rules/settings';
+import { GameState, ExceptionalEventType } from '@/types';
+import { triggerEffects, getEffectValue, calculateTotalPowerBonus } from '@/core/engine/effectSystem';
 
 export interface GameActionSlice {
   handlePlayCard: (cardIndex: number, playerType?: 'player' | 'opponent') => void;
@@ -73,6 +73,11 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
           const playedCardRef = playerSide.field[playerSide.field.length - 1];
           triggerEffects('onPlay', draft, playedCardRef, playerType, addLogWrapper);
 
+          if (draft.stoppageTimeAction === playerType) {
+              get().checkGameOver(draft, true);
+              return;
+          }
+
           if (!draft.meneurActive) {
               draft.turn = playerType === 'player' ? 'opponent' : 'player';
               draft.phase = 'MAIN';
@@ -132,7 +137,6 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                 }
             }
 
-            // CORRECTION : Autoriser le PASS si meneurActive est vrai (Passer l'action bonus)
             const canPass = force || draft.stoppageTimeAction === playerType || draft.meneurActive;
             
             if (!canPass) {
@@ -140,10 +144,12 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                 return;
             }
 
+            if (draft.stoppageTimeAction === playerType) {
+                get().checkGameOver(draft, true);
+                return;
+            }
+
             draft.meneurActive = false;
-            // Si c'était une action Meneur qu'on a passée, on log différemment ?
-            // get().addLog(draft, 'logs.pass_turn', { side: getSideKey(playerType) }); // Gardons le log standard pour l'instant
-            
             draft.turn = playerType === 'player' ? 'opponent' : 'player';
             draft.phase = 'MAIN';
             get().startTurn(draft);
@@ -210,10 +216,15 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
               blockerCard.isFlipped = true; 
               triggerEffects('onDuelResolve', draft, attackerCard, AttackerType, addLogWrapper, ['WIN', blockerCard]);
               triggerEffects('onDuelResolve', draft, blockerCard, DefenderType, addLogWrapper, ['LOSE', attackerCard]);
+              
               if (defenderSide.field.filter(c => c.isFlipped).length >= 3) {
                   get().addLog(draft, 'logs.goal_momentum');
                   get().checkMomentumGoal(draft);
               } else {
+                  if (draft.stoppageTimeAction === AttackerType) {
+                      get().checkGameOver(draft, true);
+                      return;
+                  }
                   draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
               }
           } 
@@ -228,15 +239,26 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
               }
               const flippedIdx = defenderSide.field.findIndex(c => c.isFlipped);
               if (flippedIdx !== -1) { defenderSide.discard.push(defenderSide.field.splice(flippedIdx, 1)[0]); get().addLog(draft, 'logs.defensive_recovery'); }
+              
+              if (draft.stoppageTimeAction === AttackerType) {
+                  get().checkGameOver(draft, true);
+                  return;
+              }
+
               draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
           } 
           else {
               get().addLog(draft, 'logs.duel_outcome_draw', { attacker: attackerCard.name, defender: blockerCard.name });
               let selectedEvent: ExceptionalEventType = null;
+              
+              // NOUVELLE RÈGLE AGRESSIF : Penalty seulement si égalité ET au moins une carte retournée sur son terrain
               const isBlockerAggressive = blockerCard.effects?.includes("AGRESSIF");
-              if (isBlockerAggressive) {
+              const hasFlippedCards = defenderSide.field.some(c => c.isFlipped);
+              
+              if (isBlockerAggressive && hasFlippedCards) {
                   selectedEvent = 'PENALTY';
               } 
+              
               if (selectedEvent) {
                   const result = selectedEvent === 'PENALTY' ? (Math.random() < 0.7 ? 'goal' : 'saved') : 'success';
                   
@@ -268,6 +290,12 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
                   if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
                   triggerEffects('onDuelResolve', draft, attackerCard, AttackerType, addLogWrapper, ['DRAW', blockerCard]);
                   triggerEffects('onDuelResolve', draft, blockerCard, DefenderType, addLogWrapper, ['DRAW', attackerCard]);
+                  
+                  if (draft.stoppageTimeAction === AttackerType) {
+                      get().checkGameOver(draft, true);
+                      return;
+                  }
+
                   draft.phase = 'MAIN'; draft.attackerInstanceId = null; draft.turn = DefenderType; draft.hasActionUsed = false; get().startTurn(draft);
               }
           }

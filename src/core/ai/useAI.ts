@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { useGameStore } from '../../stores/useGameStore';
+import { useGameStore } from '@/stores/useGameStore';
 import { getAIDecision } from './logic/aiDecision';
 import { getTruePower } from './logic/scorers/powerScorer';
 import { evaluateCardWeight } from './logic/scorers/cardScorer';
-import { calculateTotalPowerBonus } from '../../core/engine/effectSystem';
-import { GameState, Player } from '../../types';
+import { calculateTotalPowerBonus } from '@/core/engine/effectSystem';
+import { GameState, Player } from '@/types';
 
 const useAI = () => {
   const gameState = useGameStore(state => state.gameState);
@@ -12,7 +12,6 @@ const useAI = () => {
   const handleAttack = useGameStore(state => state.handleAttack);
   const handleBlock = useGameStore(state => state.handleBlock);
   const handlePass = useGameStore(state => state.handlePass);
-  const addLog = useGameStore(state => state.addLog);
 
   const lastActionTime = useRef<number>(0);
   const lastStateFingerprint = useRef<string>('');
@@ -31,42 +30,46 @@ const useAI = () => {
 
     const attPower = attackerCard.vaep + calculateTotalPowerBonus(state, attackerCard, 'player', 'attacker').bonus;
     const flippedCount = state.opponent.field.filter(c => c.isFlipped).length;
+    const isLosing = state.opponent.score < state.player.score;
 
     const processedBlockers = blockers.map((b: Player) => {
       let power = getTruePower(state, b, 'defender', state.opponent.field);
       let weight = evaluateCardWeight(b, state);
       
-      // RÈGLE 1 : ÉVITER LE RISQUE AGRESSIF
-      // Si le défenseur est agressif et que le duel est serré (Egalité possible), c'est dangereux (Penalty)
       const isAggressive = b.effects?.includes("AGRESSIF");
+      
+      // LOGIQUE AGRESSIVITÉ DÉFENSIVE (FAUTES)
+      // Ne prend le risque de penalty que si :
+      // 1. L'IA perd au score
+      // 2. OU le Momentum adverse est critique (2+ flips)
+      // 3. OU le duel est gagnant de toute façon
       if (isAggressive && power === attPower) {
-          // On pénalise artificiellement ce choix pour que l'IA en choisisse un autre si possible
-          power -= 0.5; // Juste assez pour qu'il ne soit pas considéré comme un "Draw" parfait
-          weight -= 10;
+          const isMomentumCrit = flippedCount >= 2;
+          if (!isLosing && !isMomentumCrit) {
+              // Si on ne perd pas et pas d'urgence momentum, on évite la faute
+              power -= 1; // On déclasse ce choix pour privilégier un bloqueur "propre"
+              weight -= 20;
+          }
       }
 
       return { card: b, power, weight };
     }).sort((a, b) => a.power - b.power);
 
     const winningBlockers = processedBlockers.filter(b => b.power > attPower);
-    const drawBlockers = processedBlockers.filter(b => b.power === attPower); // Note: Les agressifs ont power -= 0.5 donc ne seront pas ici
+    const drawBlockers = processedBlockers.filter(b => b.power === attPower);
 
     let finalBlocker;
 
     if (winningBlockers.length > 0) {
-        finalBlocker = winningBlockers[0].card; // Le plus faible des gagnants
+        finalBlocker = winningBlockers[0].card;
     } 
     else if (drawBlockers.length > 0) {
-        finalBlocker = drawBlockers[0].card; // Draw standard
+        finalBlocker = drawBlockers[0].card;
     } 
     else {
-        // PERTE DU DUEL
         if (flippedCount >= 2) {
-            // MODE SURVIE : On prend le plus fort pour maximiser les chances (ou un agressif même si risqué, car perdu pour perdu...)
-            // Ici, on prend le max power réel (sans le malus artificiel)
             finalBlocker = processedBlockers.reduce((prev, curr) => curr.power > prev.power ? curr : prev).card;
         } else {
-            // SACRIFICE : Le moins utile
             finalBlocker = processedBlockers.reduce((prev, curr) => curr.weight < prev.weight ? curr : prev).card;
         }
     }
@@ -77,8 +80,6 @@ const useAI = () => {
   const handleMainPhase = (state: GameState) => {
     const decision = getAIDecision(state);
     
-    console.log(`AI Loop: Action=${decision.action}, Phase=${state.phase}, Turn=${state.turn}`);
-
     if (decision.action === 'PLAY') {
       const cardToPlay = state.opponent.hand[decision.idx];
       if (cardToPlay) {

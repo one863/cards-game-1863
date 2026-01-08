@@ -1,5 +1,5 @@
-import { GameState } from '../../types';
-import { GAME_RULES } from '../../rules/settings';
+import { GameState } from '@/types';
+import { GAME_RULES } from '@/core/rules/settings';
 import { evaluateAttackActions } from './actions/AttackAction';
 import { evaluatePlayActions } from './actions/PlayAction';
 import { evaluateCardWeight } from './scorers/cardScorer'; 
@@ -8,12 +8,11 @@ export const getAIDecision = (gameState: GameState, isMeneur: boolean = false) =
   try {
       const ai = gameState.opponent;
       const handCount = ai.hand.length;
-      const activeCount = ai.field.filter(c => !c.isFlipped).length;
+      const activeAttackers = ai.field.filter(c => !c.isFlipped && !c.hasActed);
+      const isFieldFull = ai.field.length >= GAME_RULES.FIELD_SIZE;
 
       // 0. CHECK RESSOURCES ÉPUISÉES (Seul cas légal de PASS)
-      // On vérifie aussi si toutes les cartes sur le terrain ont déjà agi (hasActed)
-      const canAttack = ai.field.some(c => !c.isFlipped && !c.hasActed);
-      if (handCount === 0 && !canAttack) {
+      if (handCount === 0 && activeAttackers.length === 0) {
           return { action: 'PASS', reason: "Ressources épuisées (Auto-Pass)" };
       }
 
@@ -23,8 +22,25 @@ export const getAIDecision = (gameState: GameState, isMeneur: boolean = false) =
 
       console.log(`AI Brain: Attack=${attackAction.score} (${attackAction.details?.reason}), Play=${playAction.score}`);
 
-      // 2. CHOIX DE LA MEILLEURE ACTION
-      // Si une action a un score positif, on la prend
+      // 2. CAS CRITIQUE : TERRAIN PLEIN + BESOIN DE JOUER
+      // Si le terrain est plein et qu'on a une carte en main qui "veut" absolument être jouée (score élevé)
+      // On force une attaque de sacrifice pour libérer un slot.
+      if (isFieldFull && handCount > 0 && activeAttackers.length > 0) {
+          // Si PlayAction a un score très élevé (ex: survie momentum ou réponse à un ST)
+          // OU si aucune attaque n'est jugée "viable" par l'algorithme d'efficacité
+          if (playAction.score > 100 || attackAction.score <= 0) {
+              const weakest = activeAttackers.reduce((prev, curr) => 
+                  evaluateCardWeight(prev, gameState) < evaluateCardWeight(curr, gameState) ? prev : curr
+              );
+              return { 
+                  action: 'ATTACK', 
+                  id: weakest.instanceId, 
+                  reason: "Substitution stratégique (Libération de slot pour défense/renfort)" 
+              };
+          }
+      }
+
+      // 3. CHOIX DE LA MEILLEURE ACTION STANDARD
       if (attackAction.score >= playAction.score && attackAction.score > 0) {
           return { action: 'ATTACK', id: attackAction.details?.id, reason: attackAction.details?.reason };
       }
@@ -33,32 +49,24 @@ export const getAIDecision = (gameState: GameState, isMeneur: boolean = false) =
           return { action: 'PLAY', idx: playAction.details?.idx, reason: playAction.details?.reason };
       }
 
-      // 3. GESTION DES CAS DE BLOCAGE (Scores négatifs)
-      // Si on est là, c'est qu'aucune action n'est "bonne". Mais on DOIT agir.
+      // 4. GESTION DES CAS DE BLOCAGE (Interdiction de rester immobile si actions possibles)
       
-      // A. Si on peut jouer une carte, on le fait (même si score bas)
-      if (playAction.score > -1) {
-           return { action: 'PLAY', idx: playAction.details?.idx, reason: "Jeu forcé (Moindre mal)" };
+      // A. Si on peut jouer (terrain non plein), on le fait.
+      if (!isFieldFull && handCount > 0 && playAction.score > -100) {
+           return { action: 'PLAY', idx: playAction.details?.idx, reason: "Jeu forcé (Occupation terrain)" };
       }
 
-      // B. Si on ne peut pas jouer (terrain plein ou main vide), on DOIT attaquer
-      if (attackAction.score > -100) { // On accepte n'importe quelle attaque valide
-           return { action: 'ATTACK', id: attackAction.details?.id, reason: "Attaque forcée (Interdiction de passer)" };
+      // B. Si on doit attaquer (terrain plein ou main vide), on le fait même si risqué.
+      if (activeAttackers.length > 0) {
+           // On choisit celui qui a le moins de valeur pour limiter la casse
+           const sacrifice = activeAttackers.reduce((prev, curr) => 
+              evaluateCardWeight(prev, gameState) < evaluateCardWeight(curr, gameState) ? prev : curr
+           );
+           return { action: 'ATTACK', id: sacrifice.instanceId, reason: "Attaque forcée (Rotation nécessaire)" };
       }
 
-      // C. Substitution (Dernier recours si Terrain Plein et Main non vide)
-      const isFieldFull = ai.field.length >= GAME_RULES.FIELD_SIZE;
-      if (isFieldFull && handCount > 0) {
-          const activeAttackers = ai.field.filter(c => !c.isFlipped && !c.hasActed);
-          if (activeAttackers.length > 0) {
-              // On sacrifie le plus faible pour libérer un slot
-              const weakest = activeAttackers.reduce((prev, curr) => evaluateCardWeight(prev, gameState) < evaluateCardWeight(curr, gameState) ? prev : curr);
-              return { action: 'ATTACK', id: weakest.instanceId, reason: "Substitution forcée" };
-          }
-      }
-
-      // D. Si vraiment rien n'est possible (bug logique), on passe pour éviter le crash
-      return { action: 'PASS', reason: "Fallback (Bug)" };
+      // D. Si vraiment rien n'est possible, on passe.
+      return { action: 'PASS', reason: "Fin de tour (Aucune action valide restante)" };
 
   } catch (error) {
       console.error("Erreur Decision IA:", error);

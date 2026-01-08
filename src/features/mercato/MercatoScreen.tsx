@@ -1,14 +1,14 @@
 // src/features/mercato/MercatoScreen.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUserStore } from '../../stores/useUserStore';
-import { useGameStore } from '../../stores/useGameStore';
-import { useLanguage } from '../../app/LanguageContext';
-import { GAME_RULES } from '../../core/rules/settings';
-import { generateOpponentDeck } from '../../utils/deckGenerator';
-import Card from '../../components/card/Card';
+import { useUserStore } from '@/stores/useUserStore';
+import { useGameStore } from '@/stores/useGameStore';
+import { useLanguage } from '@/app/LanguageContext';
+import { GAME_RULES } from '@/core/rules/settings';
+import { generateOpponentDeck } from '@/utils/deckGenerator';
+import Card from '@/components/card/Card';
 import MercatoHeader from './components/MercatoHeader';
-import { Player } from '../../types';
+import { Player } from '@/types';
 
 interface MercatoScreenProps {
   onBackToMenu: () => void;
@@ -16,8 +16,6 @@ interface MercatoScreenProps {
 
 const MercatoScreen: React.FC<MercatoScreenProps> = ({ onBackToMenu }) => {
   const { t } = useLanguage();
-  
-  // Zustand Stores
   const { user, saveActiveTeam } = useUserStore();
   const { initMatch } = useGameStore();
   
@@ -86,19 +84,23 @@ const MercatoScreen: React.FC<MercatoScreenProps> = ({ onBackToMenu }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="flex flex-col h-full w-full bg-black text-white overflow-hidden relative"
+        className="flex flex-col h-full w-full bg-[#050505] text-white overflow-hidden relative"
     >
+      {/* Texture & Halos */}
+      <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] pointer-events-none"></div>
+      <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-[#afff34]/5 rounded-full blur-[120px] pointer-events-none"></div>
+
       <MercatoHeader 
         currentCost={currentCost} teamLength={team.length} isReady={isReady} filter={filter}
         onFilterChange={setFilter} onAutoFill={autoFillTeam} onStartMatch={startMatch} onBack={handleBack}
       />
       
-      <div className="flex-1 overflow-y-auto p-4 bg-black/50">
-        <div className="grid grid-cols-3 gap-3 pb-24">
+      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar relative z-10">
+        <div className="grid grid-cols-3 gap-4 pb-24">
             {filteredPlayers.length === 0 ? (
-                <div className="col-span-full flex flex-col items-center justify-center py-20 text-white/30">
-                    <span className="text-4xl mb-4">∅</span>
-                    <span>{t('mercato.empty')}</span>
+                <div className="col-span-full flex flex-col items-center justify-center py-32 text-white/20">
+                    <span className="text-6xl mb-6 opacity-50">∅</span>
+                    <span className="font-black uppercase tracking-widest text-[10px]">{t('mercato.empty')}</span>
                 </div>
             ) : (
                 filteredPlayers.map((p, i) => {
@@ -106,21 +108,28 @@ const MercatoScreen: React.FC<MercatoScreenProps> = ({ onBackToMenu }) => {
                     return (
                         <motion.div 
                             key={p.id}
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: i * 0.05 }}
-                            className={`relative aspect-[2/3] transition-all duration-200 ${isSelected ? 'scale-95 brightness-110' : ''}`}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.03 }}
+                            className={`relative aspect-[2/3] transition-all duration-300 ${isSelected ? 'scale-95 brightness-110' : 'hover:scale-105'}`}
                         >
                             <Card 
                                 data={p} 
                                 onClick={() => togglePlayer(p)} 
-                                isDeckSelected={isSelected} 
+                                isSelected={isSelected} 
                             />
-                            {isSelected && (
-                                <div className="absolute top-1 right-1 w-5 h-5 bg-[#afff34] rounded-full flex items-center justify-center text-black font-bold text-xs shadow-lg z-20 border border-black">
-                                    ✓
-                                </div>
-                            )}
+                            <AnimatePresence>
+                                {isSelected && (
+                                    <motion.div 
+                                        initial={{ scale: 0, rotate: -20 }}
+                                        animate={{ scale: 1, rotate: 0 }}
+                                        exit={{ scale: 0 }}
+                                        className="absolute -top-1 -right-1 w-6 h-6 bg-[#afff34] rounded-full flex items-center justify-center text-black font-black text-xs shadow-xl z-30 border-2 border-black"
+                                    >
+                                        ✓
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </motion.div>
                     );
                 })

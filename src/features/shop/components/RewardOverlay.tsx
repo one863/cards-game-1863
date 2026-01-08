@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import Card from '../../../components/card/Card';
-import { Player } from '../../../types';
-import { useLanguage } from '../../../app/LanguageContext';
+import Card from '@/components/card/Card';
+import { Player } from '@/types';
+import { useLanguage } from '@/app/LanguageContext';
 
 interface RewardOverlayProps {
   cards: Player[];

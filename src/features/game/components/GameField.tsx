@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Card from '../../../components/card/Card';
-import { Player } from '../../../types';
-import { GAME_RULES } from '../../../core/rules/settings';
+import Card from '@/components/card/Card';
+import { Player } from '@/types';
+import { GAME_RULES } from '@/core/rules/settings';
 
 interface GameFieldProps {
   field: Player[];
@@ -14,38 +14,37 @@ interface GameFieldProps {
   isMeneurActive?: boolean;
   getVisualBonus: (card: Player, side: 'player' | 'opponent') => number;
   onCardClick: (card: Player, side: 'player' | 'opponent', zone: 'hand' | 'field', idx: number) => void;
-  onDropCard: (dropIndex: number) => void; // --- NOUVELLE PROP ---
+  onDropCard: (dropIndex: number) => void;
 }
 
 const GameField: React.FC<GameFieldProps> = ({ 
   field, sideKey, attackerInstanceId, selectedAttackerId, turn, phase, isMeneurActive,
   getVisualBonus, onCardClick, onDropCard 
 }) => {
+  
+  // Rendu d'un slot individuel
   const renderFieldSlot = (i: number) => {
     const card = field[i];
     const isAttacking = attackerInstanceId === card?.instanceId;
     const isSelected = sideKey === 'player' && selectedAttackerId === card?.instanceId;
     const canBlock = turn === sideKey && phase === 'ATTACK_DECLARED' && card && !card.isFlipped;
-    
     const isEligibleForCamBonus = card && ['LW', 'RW', 'ST'].includes(card.pos);
     const canAttackBonus = isMeneurActive && turn === sideKey && isEligibleForCamBonus && !card.isFlipped && !card.hasActed;
-    
-    // Un slot est droppable s'il est vide et que c'est le tour du joueur
     const isDroppable = !card && sideKey === 'player' && turn === 'player' && phase === 'MAIN';
 
     return (
         <div 
             key={`slot-${sideKey}-${i}`} 
-            className={`flex-1 aspect-[2/3] max-w-[19%] bg-black/20 rounded-xl border border-white/5 flex items-center justify-center relative shadow-inner overflow-visible ${isDroppable ? 'hover:border-[#afff34]/80 transition-colors' : ''}`}
-            onDragOver={(e) => { if (isDroppable) e.preventDefault(); }} // Permet le drop
-            onDrop={(e) => { if (isDroppable) onDropCard(i); }} // Gère le drop sur cet emplacement
+            className={`w-full aspect-[3/4] bg-black/30 rounded-xl border border-white/10 flex items-center justify-center relative shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] overflow-visible transition-colors ${isDroppable ? 'hover:border-[#afff34]/50 bg-white/5' : ''}`}
+            onDragOver={(e) => { if (isDroppable) e.preventDefault(); }} 
+            onDrop={(e) => { if (isDroppable) onDropCard(i); }}
         >
-            {!card && <div className="w-1.5 h-1.5 rounded-full bg-white/5" />}
+            {!card && <div className="w-1 h-1 rounded-full bg-white/10" />}
             <AnimatePresence>
                 {card && (
                     <motion.div 
                         key={card.instanceId} 
-                        initial={{ opacity: 0, scale: 0.8 }} 
+                        initial={{ opacity: 0, scale: 0.9 }} 
                         animate={{ opacity: 1, scale: 1 }} 
                         className={`absolute inset-0 z-10 ${canAttackBonus ? 'cursor-pointer ring-4 ring-[#afff34]/50 rounded-xl animate-pulse' : ''}`}
                     >
@@ -56,11 +55,6 @@ const GameField: React.FC<GameFieldProps> = ({
                             onClick={() => onCardClick(card, sideKey, 'field', i)}
                             teamColor={sideKey === 'player' ? '#afff34' : '#ef4444'} 
                         />
-                        {canAttackBonus && (
-                            <div className="absolute -top-2 -right-2 bg-[#afff34] text-black text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-lg z-20 animate-bounce">
-                                ATT!
-                            </div>
-                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -69,10 +63,9 @@ const GameField: React.FC<GameFieldProps> = ({
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center px-6 relative z-10">
-        <div className="w-full flex justify-center gap-3">
-            {Array.from({ length: GAME_RULES.FIELD_SIZE }).map((_, i) => renderFieldSlot(i))}
-        </div>
+    // GRILLE EXACTE DE 5 COLONNES
+    <div className="grid grid-cols-5 gap-2 w-full max-w-[450px] px-4 mx-auto">
+        {Array.from({ length: 5 }).map((_, i) => renderFieldSlot(i))}
     </div>
   );
 };

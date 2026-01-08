@@ -1,11 +1,11 @@
 // src/stores/slices/userSlice.ts
 import { StateCreator } from 'zustand';
 import { produce } from 'immer';
-import { Player, UserProfile } from '../../types';
-import { generateTeam } from '../../core/engine/playerGenerator';
-import { openBooster } from '../../core/engine/shopEngine';
-import { GAME_RULES } from '../../core/rules/settings';
-import BOOSTERS from '../../data/boosters.json';
+import { Player, UserProfile } from '@/types';
+import { generateTeam } from '@/core/engine/playerGenerator';
+import { openBooster } from '@/core/engine/shopEngine';
+import { GAME_RULES } from '@/core/rules/settings';
+import BOOSTERS from '@/data/boosters.json';
 
 export interface UserSlice {
   credits: number;

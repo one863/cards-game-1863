@@ -1,5 +1,5 @@
-import { GameState, Player } from '../../../../types';
-import { calculateTotalPowerBonus } from '../../../engine/effectSystem';
+import { GameState, Player } from '@/types';
+import { calculateTotalPowerBonus } from '@/core/engine/effectSystem';
 
 /**
  * Calcule la puissance réelle d'une carte avec tous ses bonus.

@@ -1,7 +1,7 @@
 import { StateCreator } from 'zustand';
 import { produce } from 'immer';
-import { Player, GameState } from '../../types';
-import { GAME_RULES } from '../../core/rules/settings';
+import { Player, GameState } from '@/types';
+import { GAME_RULES } from '@/core/rules/settings';
 import { GameStatusSlice } from './gameStatusSlice';
 
 export interface GameEngineSlice {
@@ -32,7 +32,15 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
         if (draft.player.score > draft.opponent.score) draft.winner = 'player';
         else if (draft.player.score < draft.opponent.score) draft.winner = 'opponent';
         else draft.winner = 'draw';
+        
         addLog(draft, 'logs.final_whistle');
+        addLog(draft, 'logs.final_score', { 
+            pTeam: draft.player.teamName, 
+            pScore: draft.player.score, 
+            oTeam: draft.opponent.teamName, 
+            oScore: draft.opponent.score 
+        });
+
         draft.goalEvent = { type: 'GAME_OVER', reason: draft.winner === 'draw' ? "game.draw" : "game.game_over" };
         return true;
     }
@@ -115,27 +123,24 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
       
       const scorerName = attackerSide.field.find(c => c && c.instanceId === attackerId)?.name || 'Unknown'; 
       draft.goals.push({ scorerSide: attackerSideKey, scorerName, reason, timestamp: Date.now() });
+      
       draft.goalEvent = { type: 'goal', scorer: attackerSideKey, scorerName, reason };
 
-      // L'ATTAQUANT (BUTEUR) EST DÉFAUSSÉ
       const attIdx = attackerSide.field.findIndex(c => c && c.instanceId === attackerId); 
       if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
 
-      // LES CARTES RETOURNÉES DU DÉFENSEUR SONT DÉFAUSSÉES
       defenderSide.field.forEach(c => { if (c && c.isFlipped) defenderSide.discard.push(c); }); 
       defenderSide.field = defenderSide.field.filter(c => c && !c.isFlipped);
 
       if (internalCheckGameOver(draft, false, get().addLog)) return;
 
-      // RESET COMPLET DE L'ÉTAT
       draft.phase = 'MAIN';
       draft.attackerInstanceId = null;
-      draft.exceptionalEvent = null; // Important pour éviter les boucles
+      draft.exceptionalEvent = null; 
       draft.penaltyEvent = null;
 
       if (!draft.stoppageTimeAction) {
           draft.turn = defenderSideKey; 
-          // startTurn sera appelé par le prochain cycle ou resumeGame
       }
     },
 
@@ -146,51 +151,102 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
             
             const event = draft.exceptionalEvent;
             if (event) {
-                const defenderType = draft.turn; // Dans un duel, le turn appartient au défenseur (ATTACK_DECLARED)
+                const defenderType = draft.turn; 
                 const attackerType = defenderType === 'player' ? 'opponent' : 'player';
                 const attackerSide = draft[attackerType];
                 const defenderSide = draft[defenderType];
                 
-                const attackerId = (event as any).attackerId || draft.attackerInstanceId;
+                const originalAttackerId = (event as any).attackerId || draft.attackerInstanceId;
 
                 console.log(`Resuming Exceptional Event: ${event.type}, Result: ${event.result}`);
 
                 if (event.type === 'PENALTY') {
+                    // --- NOUVELLE LOGIQUE DE SELECTION ---
+                    
+                    // Fonction pour chercher un joueur dans toutes les zones
+                    const findInAllZones = (predicate: (p: Player) => boolean): Player | undefined => {
+                        return attackerSide.field.find(p => !p.isFlipped && predicate(p)) ||
+                               attackerSide.field.find(p => p.isFlipped && predicate(p)) ||
+                               attackerSide.discard.find(p => predicate(p));
+                    };
+
+                    // 1. Priorité ST
+                    let penaltyTaker = findInAllZones(p => p.pos === 'ST');
+                    
+                    // 2. Priorité CPA
+                    if (!penaltyTaker) {
+                        penaltyTaker = findInAllZones(p => p.effects?.includes('CPA'));
+                    }
+
+                    // 3. Priorité Victime (Attaquant initial)
+                    if (!penaltyTaker) {
+                        penaltyTaker = attackerSide.field.find(c => c.instanceId === originalAttackerId);
+                    }
+
+                    // Fallback si vraiment personne (ne devrait pas arriver si l'attaquant initial est là)
+                    const finalTakerId = penaltyTaker?.instanceId || originalAttackerId;
+                    const finalTakerName = penaltyTaker?.name || event.attackerName;
+
+                    get().addLog(draft, 'logs.penalty_taker_announcement', { player: finalTakerName });
+
                     if (event.result === 'goal') {
-                        get().addLog(draft, 'logs.penalty_goal', { player: event.attackerName });
+                        get().addLog(draft, 'logs.penalty_goal', { player: finalTakerName });
                         
-                        // Défausse EXPLICITE du défenseur fautif (Faute)
+                        // SEUL le joueur impliqué dans le duel initial (le défenseur fautif) est défaussé
                         const defIdx = defenderSide.field.findIndex(c => c.name === event.defenderName);
                         if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
 
-                        if (attackerId) {
-                            get().resolveGoal(draft, attackerType, defenderType, attackerId, "logs.penalty_goal");
-                        } else {
-                            console.error("Penalty Error: No attackerInstanceId found");
-                            draft.phase = 'MAIN';
-                            draft.turn = defenderType;
-                            get().startTurn(draft);
+                        // Si le but est marqué, le tireur est considéré comme le buteur.
+                        // S'il est sur le terrain (actif/retourné), il sera géré par resolveGoal.
+                        // S'il est dans la défausse, resolveGoal ne le trouvera pas dans field, donc pas de double défausse.
+                        // MAIS resolveGoal s'attend à un ID sur le terrain pour marquer le buteur.
+                        // Si le tireur est dans la défausse, on passe quand même son ID (ou celui de l'attaquant original pour la forme)
+                        // mais le plus important est que le score soit incrémenté.
+                        
+                        // Cas spécifique : Si le tireur est l'attaquant original, il sera défaussé par resolveGoal.
+                        // Si le tireur est un autre joueur sur le terrain, il sera aussi défaussé par resolveGoal (car considéré comme attaquant).
+                        // Si le tireur est dans la défausse, il y reste.
+                        
+                        // CORRECTION DEMANDÉE : "Seul le joueur impliqué dans le duel initial (l'attaquant ou le tireur s'il marque, et le défenseur fautif) est concerné par la défausse suite au penalty."
+                        // Donc si le tireur est différent de l'attaquant initial, l'attaquant initial doit-il être défaussé ?
+                        // "Seul le joueur impliqué dans le duel initial... est concerné" => Cela sous-entend que l'attaquant initial est toujours défaussé.
+                        // ET si le tireur marque, il est aussi défaussé (règle standard du but).
+                        
+                        // Logique actuelle de resolveGoal : Défausse l'attaquant dont l'ID est passé.
+                        // Donc si on passe l'ID du tireur, il sera défaussé.
+                        // Il faut aussi s'assurer que l'attaquant initial est défaussé s'il est différent.
+                        
+                        if (finalTakerId !== originalAttackerId && originalAttackerId) {
+                             const attIdx = attackerSide.field.findIndex(c => c.instanceId === originalAttackerId);
+                             if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
                         }
+
+                        if (finalTakerId) {
+                            get().resolveGoal(draft, attackerType, defenderType, finalTakerId, "logs.penalty_goal");
+                        } else {
+                            // Fallback
+                            get().resolveGoal(draft, attackerType, defenderType, originalAttackerId || "", "logs.penalty_goal");
+                        }
+
                     } else {
-                        // Log générique "Arrêté par le gardien"
                         get().addLog(draft, 'logs.penalty_saved_gk');
                         
-                        // DÉFAUSSE MUTUELLE (Neutralisation)
-                        if (attackerId) {
-                            const attIdx = attackerSide.field.findIndex(c => c.instanceId === attackerId);
-                            if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
-                        }
-                        
+                        // Défausse du défenseur fautif (impliqué dans le duel initial)
                         const defIdx = defenderSide.field.findIndex(c => c.name === event.defenderName);
                         if (defIdx !== -1) defenderSide.discard.push(defenderSide.field.splice(defIdx, 1)[0]);
                         
-                        // Nettoyage et changement de tour
+                        // Défausse de l'attaquant initial (impliqué dans le duel initial)
+                        if (originalAttackerId) {
+                            const attIdx = attackerSide.field.findIndex(c => c.instanceId === originalAttackerId);
+                            if (attIdx !== -1) attackerSide.discard.push(attackerSide.field.splice(attIdx, 1)[0]);
+                        }
+                        
+                        // Le tireur (s'il est différent) n'est PAS défaussé en cas d'échec, sauf s'il était l'attaquant initial.
+
                         draft.phase = 'MAIN';
                         draft.attackerInstanceId = null;
-                        draft.turn = defenderType; // Le défenseur reprend la main
+                        draft.turn = defenderType; 
                         draft.hasActionUsed = false;
-                        
-                        // Nettoyage explicite des événements
                         draft.exceptionalEvent = null;
                         draft.penaltyEvent = null;
 
@@ -209,7 +265,7 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
                 return;
             }
 
-            // Cas standard (Goal Animation finie, etc.)
+            // Cas standard
             draft.goalEvent = null;
             if (draft.winner) return;
             if (draft.stoppageTimeAction) internalCheckGameOver(draft, true, get().addLog);
@@ -229,8 +285,9 @@ export const createGameEngineSlice: StateCreator<FullGameStore, [], [], GameEngi
               const attackerId = draft.attackerInstanceId || (attackerSide?.field?.find(c => !c.isFlipped)?.instanceId);
               if (attackerId) {
                 const losingTeamName = draft[sideKey].teamName;
-                get().addLog(draft, 'logs.goal_momentum_pressure', { teamName: losingTeamName });
-                get().resolveGoal(draft, attackerSideKey, sideKey, attackerId, "logs.goal_momentum");
+                const reasonKey = 'logs.goal_momentum_pressure';
+                get().addLog(draft, reasonKey, { teamName: losingTeamName });
+                get().resolveGoal(draft, attackerSideKey, sideKey, attackerId, reasonKey);
                 return true;
               }
           }

@@ -1,6 +1,6 @@
-import { GameState, Player } from '../../../../types';
+import { GameState, Player } from '@/types';
 import { getTruePower } from '../scorers/powerScorer';
-import { AI_CONFIG } from '../../aiConfig';
+import { AI_CONFIG } from '@/core/ai/aiConfig';
 
 export interface ScoredAction {
     type: 'ATTACK' | 'PLAY' | 'PASS';
@@ -21,13 +21,23 @@ export const evaluateAttackActions = (gameState: GameState): ScoredAction => {
     const playerFlippedCount = player.field.filter(c => c.isFlipped).length;
     const aiFlippedCount = aiField.filter(c => c.isFlipped).length;
     const isMomentumFinish = playerFlippedCount >= 2;
-    const isMomentumDanger = aiFlippedCount >= AI_CONFIG.THRESHOLDS.MOMENTUM_DANGER_COUNT;
-    const isStoppageTime = ai.deck.length === 0 && ai.hand.length === 0;
+    const isMomentumDanger = aiFlippedCount >= 2; 
+    const isStoppageTimeRisk = ai.deck.length === 0 && ai.hand.length <= 1;
     const isWinning = ai.score > player.score;
+    const isLosing = ai.score < player.score;
+    const isDraw = ai.score === player.score;
 
-    const defenderPowers = player.field.filter(c => !c.isFlipped).map(d => getTruePower(gameState, d, 'defender', player.field));
-    const maxPlayerDefPower = defenderPowers.length > 0 ? Math.max(...defenderPowers) : 0;
-    const minPlayerDefPower = defenderPowers.length > 0 ? Math.min(...defenderPowers) : 0;
+    const defenderData = player.field.filter(c => !c.isFlipped).map(d => ({
+        instanceId: d.instanceId,
+        power: getTruePower(gameState, d, 'defender', player.field),
+        isMoteur: d.effects?.includes('MOTEUR'),
+        pos: d.pos,
+        name: d.name
+    }));
+
+    const maxPlayerDefPower = defenderData.length > 0 ? Math.max(...defenderData.map(d => d.power)) : 0;
+    const minPlayerDefPower = defenderData.length > 0 ? Math.min(...defenderData.map(d => d.power)) : 0;
+    const gkData = defenderData.find(d => d.pos === 'GK');
 
     // 1. BUT OUVERT (Priorité Maximale : 100)
     if (playerVisibleCount === 0) {
@@ -50,75 +60,82 @@ export const evaluateAttackActions = (gameState: GameState): ScoredAction => {
 
     activeAttackers.forEach(att => {
         const attPower = getTruePower(gameState, att, 'attacker', aiField);
-        const isAggressive = att.effects?.includes("AGRESSIF");
         const isGK = att.pos === 'GK';
-        const isKeyDefender = ['CB', 'CDM'].includes(att.pos) || att.effects?.includes("MOTEUR");
-        const isStriker = ['ST', 'LW', 'RW'].includes(att.pos);
+        const isMoteur = att.effects?.includes("MOTEUR");
+        const isST = att.pos === 'ST';
 
         let score = 0;
         let currentReason = "";
 
-        // RÈGLE 1 : SANCTUARISATION DU GK
+        // INTERDICTION D'ATTAQUER AVEC UN GK
         if (isGK) {
-            score -= 50; 
+            score -= 200; 
             currentReason = "GK reste au but";
         }
 
-        // RÈGLE 2 & 4 : GESTION DES MURS ET DUELS PERDUS D'AVANCE
-        // Si on ne bat pas le défenseur le plus faible, c'est du suicide
-        if (attPower < minPlayerDefPower) {
-            score -= 60; // Malus augmenté
-            currentReason = "Mur infranchissable";
-        } 
-        // RÈGLE 3 : GESTION DU PLAYMAKER
-        // Si on a l'effet Meneur actif, on booste l'attaque car c'est une action gratuite/bonus
-        if (gameState.meneurActive) {
-            score += 20;
-            currentReason += " (Effet Meneur)";
+        // PROTECTION DES MOTEURS
+        if (isMoteur) {
+            score -= 40;
+            currentReason = "Garde le MOTEUR au sol";
         }
 
-        // Si on bat tout le monde (Victoire nette)
-        if (attPower > maxPlayerDefPower) {
-            score = AI_CONFIG.PRIORITIES.WINNING_DUEL; // 80
-            currentReason = "Attaque dominante";
-            if (!isKeyDefender && !isGK) score += 5;
+        // --- ÉVALUATION CIBLAGE ---
+        const targetableDefenders = defenderData.filter(d => attPower > d.power);
+        const drawDefenders = defenderData.filter(d => attPower === d.power);
+        const superiorDefenders = defenderData.filter(d => attPower < d.power);
+
+        if (targetableDefenders.length > 0) {
+            // On peut battre quelqu'un (Maillon faible)
+            score = 60 + (attPower - minPlayerDefPower) * 5;
+            currentReason = "Ciblage maillon faible";
+
+            // NETTOYAGE TERRAIN (Si terrain presque plein, on incite à l'attaque avec les forts)
+            if (aiField.length >= 4 && attPower >= 7) {
+                score += 30;
+                currentReason = "Attaque de nettoyage (Libération terrain)";
+            }
         } 
-        // Si on bat au moins le plus faible (Ciblage des faiblesses)
-        else {
-            // RÈGLE : EVITEMENT DU DRAW (ÉGALITÉ)
-            // Si le meilleur défenseur a la même puissance que nous, on risque le Draw.
-            // Draw = Perte de carte pour nous (Attaquant) vs Flip pour lui (Défenseur). C'est MAUVAIS.
-            if (attPower === maxPlayerDefPower) {
-                score -= 30; // On pénalise fortement le Draw sur le meilleur défenseur
-                currentReason = "Risque de Draw inutile";
-            } else if (attPower > minPlayerDefPower) {
-                // On peut battre un faible, c'est bien.
-                score = 30 + (attPower - minPlayerDefPower) * 2;
-                currentReason = "Attaque ciblée sur faiblesse";
+        else if (drawDefenders.length > 0) {
+            const hasMoteurInDraw = drawDefenders.some(d => d.isMoteur);
+            if (hasMoteurInDraw) {
+                score = 50;
+                currentReason = "Sacrifice pour MOTEUR adverse";
             } else {
-                score -= 40; // On ne bat personne
+                score = -40;
+                currentReason = "Évite le Draw inutile";
             }
+        } 
+        else {
+            score = -100;
+            currentReason = "Infériorité statistique";
+        }
 
-            // Protection Buteurs
-            if (isStriker && attPower <= maxPlayerDefPower) {
-                score -= 20; 
-                currentReason = "Protection buteur";
-            }
-
-            // Prudence Agressive
-            if (isAggressive && attPower <= maxPlayerDefPower) {
-                score -= 20;
-            }
-            
-            // Prudence Momentum
-            if (isMomentumDanger) {
-                score -= 30;
-                currentReason = "Prudence Momentum";
+        // --- PRUDENCE CONTRE GK ---
+        if (gkData && attPower <= gkData.power) {
+            // Si on ne bat pas NETTEMENT le GK
+            if (isDraw || isWinning) {
+                // Au score nul ou si on gagne, on ne prend pas le risque de perdre un attaquant sur le GK
+                score -= 50;
+                currentReason = "Prudence face au GK (Score sécurisé)";
+                
+                // Si on est ST mais qu'on n'a pas le bonus max (+2), on attend
+                if (isST) {
+                    const hasCB = player.field.some(p => !p.isFlipped && p.pos === 'CB');
+                    if (hasCB) {
+                        score -= 20;
+                        currentReason = "Attente bonus ST (+2) face au GK";
+                    }
+                }
             }
         }
 
-        if (isStoppageTime && !isWinning && score > 0) {
-            score += 30;
+        // GESTION STOPPAGE TIME
+        if (isStoppageTimeRisk) {
+             if (isWinning) {
+                 score -= 80;
+             } else if (score < 80) {
+                 score -= 50;
+             }
         }
 
         if (score > bestAttackScore) {
@@ -132,11 +149,5 @@ export const evaluateAttackActions = (gameState: GameState): ScoredAction => {
         return { type: 'ATTACK', score: bestAttackScore, details: { id: (bestAttacker as Player).instanceId, reason } };
     }
 
-    // 4. ATTAQUE PAR DÉFAUT
-    if (activeAttackers.length > 0) {
-        const defaultAttacker = activeAttackers.reduce((prev, curr) => getTruePower(gameState, curr, 'attacker', aiField) > getTruePower(gameState, prev, 'attacker', aiField) ? curr : prev);
-        return { type: 'ATTACK', score: 10, details: { id: defaultAttacker.instanceId, reason: "Attaque par défaut (Force)" } };
-    }
-
-    return { type: 'ATTACK', score: -1, details: { reason: "Aucune attaque valide" } };
+    return { type: 'ATTACK', score: -1, details: { reason: "Aucune attaque statistiquement viable" } };
 };

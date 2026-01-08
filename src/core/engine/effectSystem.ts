@@ -1,4 +1,4 @@
-import { GameState, Player, Position } from '../../types';
+import { GameState, Player, Position } from '@/types';
 
 export interface EffectDefinition {
   onPlay?: (context: EffectContext) => void;
@@ -17,24 +17,26 @@ export interface EffectContext {
 
 const createPoste = (type: 'attacker' | 'defender' | 'both', amount: number, label: string): EffectDefinition => ({
   getPowerBonus: (_, side) => (type === 'both' || side === type) ? amount : 0,
-  logLabel: (side) => (type === 'both' || side === type) ? `${label} (+${amount} ${side === 'attacker' ? 'ATT' : 'DEF'})` : null
+  logLabel: (side) => ((type === 'both' || side === type) && amount > 0) ? `${label} (+${amount} ${side === 'attacker' ? 'ATT' : 'DEF'})` : null
 });
 
-// Postes considérés comme des milieux
 const MIDFIELD_POSITIONS: Position[] = ['CDM', 'CM', 'CAM', 'LM', 'RM'];
-// Postes considérés comme des cibles valides pour l'action CAM (Attaquants)
 const CAM_TARGET_POSITIONS: Position[] = ['LW', 'RW', 'ST'];
 
 export const CARD_EFFECTS: Record<string, EffectDefinition> = {
   "AGRESSIF": {
     onDuelResolve: ({ gameState, card, ownerSide, addLog }, result, opponentCard) => {
-      if (result === 'LOSE' && gameState) {
+      // CORRECTION : Si c'est un BUT (resolveGoal sera appelé), on n'active pas l'effet Agressif
+      // car le buteur est déjà défaussé par la logique de but.
+      // On vérifie si un but est en cours (goalEvent) ou si c'est une victoire offensive classique
+      if (result === 'LOSE' && gameState && !gameState.goalEvent) {
         const oppSideKey = ownerSide === 'player' ? 'opponent' : 'player';
         const oppSide = gameState[oppSideKey];
         if (oppSide && oppSide.field) {
             const oppIdx = oppSide.field.findIndex(c => c.instanceId === opponentCard.instanceId);
             if (oppIdx !== -1) {
-              oppSide.discard.push(oppSide.field.splice(oppIdx, 1)[0]);
+              const victim = oppSide.field.splice(oppIdx, 1)[0];
+              oppSide.discard.push(victim);
               gameState.explosionEvent = { active: true, timestamp: Date.now() };
               addLog('logs.aggressif_trigger', { side: ownerSide === 'player' ? 'logs.side_you' : 'logs.side_opp', player: card.name, victim: opponentCard.name });
             }
@@ -42,11 +44,23 @@ export const CARD_EFFECTS: Record<string, EffectDefinition> = {
       }
     }
   },
-  "BOOST1": { value: 1 },
-  "BOOST2": { value: 2 },
+  "POSSESSION": { getPowerBonus: () => 0 }, // Nouveau mot-clé avec effet passif (compteur d'étoiles)
+  "BOOST1": { value: 1, getPowerBonus: () => 0 },
+  "BOOST2": { value: 2, getPowerBonus: () => 0 },
   
   "GK": createPoste('defender', 2, 'GK'),
-  "ST": createPoste('attacker', 2, 'ST'),
+  
+  "ST": {
+    getPowerBonus: (context, side) => {
+        if (side !== 'attacker') return 0;
+        const oppSideKey = context.ownerSide === 'player' ? 'opponent' : 'player';
+        const oppField = context.gameState[oppSideKey]?.field || [];
+        const hasCB = oppField.some(p => !p.isFlipped && p.pos === 'CB');
+        return hasCB ? 1 : 2;
+    },
+    logLabel: (side) => side === 'attacker' ? "ST" : null
+  },
+
   "CB": createPoste('defender', 1, 'CB'),
   "CDM": createPoste('defender', 1, 'CDM'),
   "LB": createPoste('defender', 1, 'LB'),
@@ -99,14 +113,25 @@ export const CARD_EFFECTS: Record<string, EffectDefinition> = {
       }
     }
   },
-  "CM": {}
+  "CM": {},
+  "VOLUME": { getPowerBonus: () => 0 },
+  "TECHNIQUE": { getPowerBonus: () => 0 },
+  "VISION": { getPowerBonus: () => 0 },
+  "PROVOCATEUR": { getPowerBonus: () => 0 },
+  "FINISSEUR": { getPowerBonus: () => 0 },
+  "VITESSE": { getPowerBonus: () => 0 },
+  "AERIEN": { getPowerBonus: () => 0 },
+  "PASSEUR": { getPowerBonus: () => 0 },
+  "SOLIDAIRE": { getPowerBonus: () => 0 },
+  "PHYSIQUE": { getPowerBonus: () => 0 },
+  "TIRLOINTAIN": { getPowerBonus: () => 0 }
 };
 
 const getCardEffects = (card: Player) => {
     if (!card) return [];
-    const effects = [...(card.effects || [])];
+    const effects = (card.effects || []).filter(e => !!e && e !== "");
     if (card.pos) effects.push(card.pos);
-    return effects.filter(Boolean);
+    return effects;
 };
 
 export const calculateTotalPowerBonus = (
@@ -121,7 +146,6 @@ export const calculateTotalPowerBonus = (
     const labels: string[] = [];
     const context: EffectContext = { gameState, card, ownerSide, addLog: () => {} };
 
-    // 1. EFFETS DE CARTE & POSTES
     getCardEffects(card).forEach(name => {
         const def = CARD_EFFECTS[name];
         if (def && def.getPowerBonus) {
@@ -129,14 +153,17 @@ export const calculateTotalPowerBonus = (
             if (b > 0) {
                 totalBonus += b;
                 const l = def.logLabel?.(situation);
-                if (l) labels.push(l);
+                if (name === 'ST' && situation === 'attacker') {
+                    labels.push(`ST (+${b} ATT)`);
+                } else if (l) {
+                    labels.push(l);
+                }
             }
         }
     });
 
     const sideData = gameState[ownerSide];
     if (sideData && sideData.field) {
-        // 2. MOTEUR CM (+1 DEF pour les milieux)
         const hasActiveCMMate = sideData.field.some(p => p && p.instanceId !== card.instanceId && p.pos === 'CM' && !p.isFlipped);
         const isMidfielder = MIDFIELD_POSITIONS.includes(card.pos);
         if (situation === 'defender' && hasActiveCMMate && isMidfielder) {

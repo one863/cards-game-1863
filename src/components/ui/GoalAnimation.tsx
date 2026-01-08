@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLanguage } from '../../app/LanguageContext';
+import { useLanguage } from '@/app/LanguageContext';
 
 interface GoalAnimationProps {
   type: 'goal' | 'GAME_OVER'; 
@@ -29,13 +29,23 @@ const GoalAnimation: React.FC<GoalAnimationProps> = ({
 
   if (type === 'GAME_OVER') return null;
 
+  // Calcul du texte de la raison
+  const getReasonText = () => {
+    if (!reason) return null;
+    if (reason === 'logs.goal_momentum_pressure') {
+      const defenderSideName = scorer === 'player' ? (teamNames?.opponent || 'OPP') : (teamNames?.player || 'YOU');
+      return t(reason, { teamName: defenderSideName });
+    }
+    return t(reason);
+  };
+
   return (
     <AnimatePresence>
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-3xl"
         onClick={onComplete} 
       >
         <div className="relative flex flex-col items-center w-full">
@@ -63,13 +73,13 @@ const GoalAnimation: React.FC<GoalAnimationProps> = ({
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="flex items-center justify-center gap-12 z-20 bg-black/40 px-12 py-6 rounded-3xl border border-white/10 backdrop-blur-xl shadow-2xl min-w-[300px]"
+                className="flex items-center justify-center gap-12 z-20 bg-black/20 px-12 py-6 rounded-3xl border border-white/10 shadow-2xl min-w-[300px]"
             >
                 {/* JOUEUR */}
                 <div className="flex flex-col items-center flex-1">
                     <span className="text-[#afff34] font-black text-6xl drop-shadow-lg">{playerScore}</span>
-                    <span className="text-white/60 text-xs font-black uppercase tracking-[0.2em] mt-2 whitespace-nowrap">
-                        {t(teamNames?.player || 'YOU')}
+                    <span className="text-white/60 text-xs font-black uppercase tracking-[0.2em] mt-2 whitespace-nowrap text-center">
+                        {teamNames?.player || 'YOU'}
                     </span>
                 </div>
 
@@ -78,8 +88,8 @@ const GoalAnimation: React.FC<GoalAnimationProps> = ({
                 {/* ADVERSAIRE */}
                 <div className="flex flex-col items-center flex-1">
                     <span className="text-white font-black text-6xl drop-shadow-lg">{opponentScore}</span>
-                    <span className="text-white/60 text-xs font-black uppercase tracking-[0.2em] mt-2 whitespace-nowrap">
-                        {t(teamNames?.opponent || 'OPP')}
+                    <span className="text-white/60 text-xs font-black uppercase tracking-[0.2em] mt-2 whitespace-nowrap text-center">
+                        {teamNames?.opponent || 'OPP'}
                     </span>
                 </div>
             </motion.div>
@@ -95,8 +105,8 @@ const GoalAnimation: React.FC<GoalAnimationProps> = ({
                     {scorerName || 'Unknown'}
                 </div>
                 {reason && (
-                    <span className="mt-3 text-white/80 text-sm font-medium bg-black/50 px-4 py-1.5 rounded-lg backdrop-blur-md border border-white/5">
-                        {t(reason)}
+                    <span className="mt-3 text-white/80 text-sm font-medium bg-black/30 px-4 py-1.5 rounded-lg border border-white/5 text-center">
+                        {getReasonText()}
                     </span>
                 )}
             </motion.div>

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import fr from '../core/i18n/fr.json';
-import en from '../core/i18n/en.json';
+import fr from '@/core/i18n/fr.json';
+import en from '@/core/i18n/en.json';
 
 type LanguageContextType = {
   t: (key: string, params?: Record<string, any>) => string;

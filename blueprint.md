@@ -74,24 +74,25 @@ Application stratégique de duel de cartes de football (React/TypeScript/Zustand
 
 #### **Spécialités (Keywords)**
 *   **AGRESSIF** : 
-    *   *En défense* : Déclenche un Penalty en cas d'égalité (ATT=DEF).
+    *   *En défense* : Déclenche un Penalty en cas d'égalité (ATT=DEF) si au moins une carte est retournée dans son terrain.
     *   *En duel* : Si la carte perd, elle emmène l'adversaire avec elle dans la défausse (Neutralisation).
 *   **BOOST (1 ou 2)** : Carte consommable depuis la main pour ajouter +1 ou +2 à la défense lors d'un duel.
+*   **AERIEN**
 
 #### **Bonus de Poste (Défense)**
 *   **GK (Gardien)** : **+2 DEF** (Le rempart ultime).
-*   **CB (Défenseur Central)** : **+1 DEF**.
-*   **CDM (Milieu Défensif)** : **+1 DEF**.
+*   **CB (Défenseur Central)** : **+1 DEF**. Désactive le bonus d'un ATT adverse.
 *   **LB / RB (Latéraux)** : **+1 DEF**. Également utiles pour contrer les Ailiers (LW/RW).
 
+#### **Bonus de Poste (Milieu)**
+*   **CDM (Milieu Défensif)** : **+1 DEF**.
+*   **CM (Milieu central)** : Tant qu'il est actif sur le terrain, il offre **+1 DEF** à tous les autres milieux de terrain alliés (CDM, CM, CAM, LM, RM).
+*   **CAM (Meneur / Meneur de Jeu)** : Lorsqu'il est joué, il permet immédiatement à un attaquant (ST, LW, RW) présent sur le terrain de lancer une action supplémentaire sans terminer le tour.
+
 #### **Bonus de Poste (Attaque)**
-*   **ST (Buteur)** : **+2 ATT** (Le finisseur).
+*   **ST (Buteur)** : **+2 ATT** si aucun défenseur central (CB) n'est présent sur le terrain de l'adversaire, sinon **+1 ATT**.
 *   **LW / RW (Ailiers)** : **+2 ATT** *uniquement* si l'adversaire ne possède aucun latéral (LB, RB, LM, RM) actif sur le terrain.
 *   **LM / RM (Milieux Latéraux)** : **+1 ATT**. servent aussi de rempart contre les ailiers adverses.
-
-#### **Synergies & Tactiques**
-*   **CAM (Meneur / Meneur de Jeu)** : Lorsqu'il est joué, il permet immédiatement à un attaquant (ST, LW, RW) présent sur le terrain de lancer une action supplémentaire sans terminer le tour.
-*   **CM (Moteur)** : Tant qu'il est actif sur le terrain, il offre **+1 DEF** à tous les autres milieux de terrain alliés (CDM, CM, CAM, LM, RM).
 
 ## 3. Plan de Développement Actuel
 1.  **Événements Statiques** : Implémenter Corner et Coup Franc (probabilités et visuels).

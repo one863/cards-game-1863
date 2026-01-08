@@ -1,9 +1,9 @@
 import React from 'react';
-import { useGameStore } from '../../../stores/useGameStore';
-import ExplosionAnimation from '../../../components/ui/ExplosionAnimation';
-import BoostAnimation from '../../../components/ui/BoostAnimation';
-import GoalAnimation from '../../../components/ui/GoalAnimation';
-import PenaltyAnimation from '../../../components/ui/PenaltyAnimation'; 
+import { useGameStore } from '@/stores/useGameStore';
+import ExplosionAnimation from '@/components/ui/ExplosionAnimation';
+import BoostAnimation from '@/components/ui/BoostAnimation';
+import GoalAnimation from '@/components/ui/GoalAnimation';
+import PenaltyAnimation from '@/components/ui/PenaltyAnimation'; 
 
 interface VisualEffectsLayerProps {
   onResumeGame: () => void;

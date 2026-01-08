@@ -1,7 +1,7 @@
 // src/core/engine/shopEngine.ts
-import BOOSTERS from '../../data/boosters.json';
+import BOOSTERS from '@/data/boosters.json';
 import { generatePlayer } from './playerGenerator';
-import { Player } from '../../types';
+import { Player } from '@/types';
 
 interface Pack {
   id: string;

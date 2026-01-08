@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Player } from '../../types';
+import { Player } from '@/types';
 import MiniCard from './MiniCard';
 import LargeCard from './LargeCard';
 

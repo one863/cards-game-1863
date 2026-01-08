@@ -1,5 +1,5 @@
 import { StateCreator } from 'zustand';
-import { GameState, GameLog } from '../../types';
+import { GameState, GameLog } from '@/types';
 
 export interface GameStatusSlice {
   gameState: GameState | null;
