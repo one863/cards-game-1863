@@ -20,7 +20,11 @@ const useAI = () => {
   const handleDefensivePhase = (state: GameState) => {
     const attackerId = state.attackerInstanceId;
     if (!attackerId) return;
-    const attackerCard = state.player.field.find(c => c.instanceId === attackerId);
+    
+    const attackerSideKey = state.turn === 'player' ? 'opponent' : 'player';
+    const attackerSide = state[attackerSideKey];
+    const attackerCard = attackerSide.field.find(c => c.instanceId === attackerId);
+    
     const blockers = state.opponent.field.filter((c: Player) => !c.isFlipped);
 
     if (!blockers.length || !attackerCard) { 
@@ -28,53 +32,33 @@ const useAI = () => {
         return; 
     }
 
-    const attPower = attackerCard.vaep + calculateTotalPowerBonus(state, attackerCard, 'player', 'attacker').bonus;
+    const attPower = attackerCard.vaep + calculateTotalPowerBonus(state, attackerCard, attackerSideKey, 'attacker').bonus;
     const flippedCount = state.opponent.field.filter(c => c.isFlipped).length;
-    const isLosing = state.opponent.score < state.player.score;
 
+    // ÉVALUATION TACTIQUE DES BLOQUEURS
     const processedBlockers = blockers.map((b: Player) => {
-      let power = getTruePower(state, b, 'defender', state.opponent.field);
-      let weight = evaluateCardWeight(b, state);
+      const power = getTruePower(state, b, 'defender', state.opponent.field);
+      const weight = evaluateCardWeight(b, state);
       
-      const isAggressive = b.effects?.includes("AGRESSIF");
+      // SCORE DE PRIORITÉ : On veut maximiser la puissance tout en minimisant le sacrifice de cartes clés
+      let priorityScore = 0;
       
-      // LOGIQUE AGRESSIVITÉ DÉFENSIVE (FAUTES)
-      // Ne prend le risque de penalty que si :
-      // 1. L'IA perd au score
-      // 2. OU le Momentum adverse est critique (2+ flips)
-      // 3. OU le duel est gagnant de toute façon
-      if (isAggressive && power === attPower) {
-          const isMomentumCrit = flippedCount >= 2;
-          if (!isLosing && !isMomentumCrit) {
-              // Si on ne perd pas et pas d'urgence momentum, on évite la faute
-              power -= 1; // On déclasse ce choix pour privilégier un bloqueur "propre"
-              weight -= 20;
-          }
-      }
+      // 1. On cherche la victoire ou l'égalité
+      if (power > attPower) priorityScore += 1000;
+      else if (power === attPower) priorityScore += 500;
+      
+      // 2. Bonus si c'est un pur défenseur (CB/GK) : On veut qu'ils fassent leur job
+      if (['CB', 'GK', 'LB', 'RB'].includes(b.pos)) priorityScore += 200;
+      
+      // 3. Malus si c'est une carte de grande valeur (Milieux/Attaquants) : On veut les préserver pour l'attaque
+      if (['CAM', 'ST', 'LW', 'RW'].includes(b.pos)) priorityScore -= 300;
 
-      return { card: b, power, weight };
-    }).sort((a, b) => a.power - b.power);
+      return { card: b, power, weight, priorityScore };
+    }).sort((a, b) => b.priorityScore - a.priorityScore || a.weight - b.weight);
 
-    const winningBlockers = processedBlockers.filter(b => b.power > attPower);
-    const drawBlockers = processedBlockers.filter(b => b.power === attPower);
-
-    let finalBlocker;
-
-    if (winningBlockers.length > 0) {
-        finalBlocker = winningBlockers[0].card;
-    } 
-    else if (drawBlockers.length > 0) {
-        finalBlocker = drawBlockers[0].card;
-    } 
-    else {
-        if (flippedCount >= 2) {
-            finalBlocker = processedBlockers.reduce((prev, curr) => curr.power > prev.power ? curr : prev).card;
-        } else {
-            finalBlocker = processedBlockers.reduce((prev, curr) => curr.weight < prev.weight ? curr : prev).card;
-        }
-    }
-
-    handleBlock(finalBlocker.instanceId!); 
+    // On prend le bloqueur avec le meilleur score de priorité
+    const bestBlocker = processedBlockers[0].card;
+    handleBlock(bestBlocker.instanceId!); 
   };
 
   const handleMainPhase = (state: GameState) => {
@@ -115,7 +99,7 @@ const useAI = () => {
     const aiAction = () => {
       const now = Date.now();
       const isNewState = fingerprint !== lastStateFingerprint.current;
-      const isCooldownOver = now - lastActionTime.current > 1000;
+      const isCooldownOver = now - lastActionTime.current > 1500;
 
       if (!isNewState && !isCooldownOver) return;
       
@@ -131,7 +115,7 @@ const useAI = () => {
       }
     };
     
-    stuckTimer.current = setTimeout(aiAction, 500); 
+    stuckTimer.current = setTimeout(aiAction, 2000); 
 
     return () => {
         if (stuckTimer.current) clearTimeout(stuckTimer.current);

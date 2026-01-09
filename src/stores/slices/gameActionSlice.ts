@@ -3,8 +3,9 @@ import { produce } from 'immer';
 import { GameStatusSlice } from './gameStatusSlice';
 import { GameEngineSlice } from './gameEngineSlice';
 import { GAME_RULES } from '@/core/rules/settings';
-import { GameState, ExceptionalEventType } from '@/types';
+import { GameState, ExceptionalEventType, Player } from '@/types';
 import { triggerEffects, getEffectValue, calculateTotalPowerBonus } from '@/core/engine/effectSystem';
+import { evaluateCardWeight } from '@/core/ai/logic/scorers/cardScorer';
 
 export interface GameActionSlice {
   handlePlayCard: (cardIndex: number, playerType?: 'player' | 'opponent') => void;
@@ -48,7 +49,9 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
 
     clearExceptionalEvent: () => {
         set(produce((state: FullGameStore) => {
-            if (state.gameState) state.gameState.exceptionalEvent = null;
+            if (state.gameState) {
+                state.gameState.exceptionalEvent = null;
+            }
         }));
     },
 
@@ -140,6 +143,7 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
             const canPass = force || draft.stoppageTimeAction === playerType || draft.meneurActive;
             
             if (!canPass) {
+                // LOG MANQUANT : Tentative de pass interdite
                 get().addLog(draft, 'logs.no_pass_allowed'); 
                 return;
             }
@@ -251,7 +255,6 @@ export const createGameActionSlice: StateCreator<FullGameStore, [], [], GameActi
               get().addLog(draft, 'logs.duel_outcome_draw', { attacker: attackerCard.name, defender: blockerCard.name });
               let selectedEvent: ExceptionalEventType = null;
               
-              // NOUVELLE RÈGLE AGRESSIF : Penalty seulement si égalité ET au moins une carte retournée sur son terrain
               const isBlockerAggressive = blockerCard.effects?.includes("AGRESSIF");
               const hasFlippedCards = defenderSide.field.some(c => c.isFlipped);
               

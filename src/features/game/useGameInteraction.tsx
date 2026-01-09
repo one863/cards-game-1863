@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Player, GameState } from '@/types';
-import { GameActionType } from './components/InspectionModal';
+import { GameActionType } from '@/features/game/components/InspectionModal';
 import { useLanguage } from '@/app/LanguageContext';
 import { MdArrowUpward, MdShield, MdFlashOn } from 'react-icons/md';
 import React from 'react';
@@ -36,7 +36,9 @@ export const useGameInteraction = (
   const [draggedCardIndex, setDraggedCardIndex] = useState<number | null>(null);
 
   const onCardClick = (card: Player, side: 'player' | 'opponent', zone: 'hand' | 'field', idx: number) => {
-    if (!gameState || gameState.winner) return;
+    if (!gameState) return;
+    // SUPPRESSION DE LA CONDITION gameState.winner
+    // On permet l'inspection pour le "Review Match"
     setInspectedCard({ card, side, zone, idx });
   };
 
@@ -58,36 +60,34 @@ export const useGameInteraction = (
   };
 
   const inspectionActions = useMemo(() => {
-      if (!inspectedCard || inspectedCard.side !== 'player' || !gameState) return [];
+      // Si le match est fini, aucune action n'est possible, on retourne une liste vide
+      if (!inspectedCard || inspectedCard.side !== 'player' || !gameState || gameState.winner) return [];
       
       const actions: { type: GameActionType; label: string; icon: React.ReactNode }[] = [];
       const { zone, card } = inspectedCard;
       const { phase, turn } = gameState;
       
-      // Actions Phase MAIN
-      if (zone === 'hand' && phase === 'MAIN' && turn === 'player') {
-          actions.push({ type: 'PLAY', label: t('game.play') || 'JOUER', icon: <MdArrowUpward /> });
-      }
-      else if (zone === 'field' && phase === 'MAIN' && turn === 'player' && !card.hasActed && !card.isFlipped) {
-          const playerField = gameState.player?.field || [];
-          const visibleCount = playerField.filter(c => c && !c.isFlipped).length;
-          const opponentVisibleCount = (gameState.opponent?.field || []).filter(c => c && !c.isFlipped).length;
-          const canGkAttack = card.pos === 'GK' ? (visibleCount === 1 || opponentVisibleCount === 0) : true;
-          
-          if (canGkAttack) {
-            actions.push({ type: 'ATTACK', label: t('game.attack') || 'ATTAQUER', icon: <MdArrowUpward /> });
+      if (phase === 'MAIN' && turn === 'player') {
+          if (zone === 'hand') {
+            actions.push({ type: 'PLAY', label: t('game.play') || 'JOUER', icon: <MdArrowUpward /> });
+          } else if (zone === 'field' && !card.hasActed && !card.isFlipped) {
+              const playerField = gameState.player?.field || [];
+              const visibleCount = playerField.filter(c => c && !c.isFlipped).length;
+              const opponentVisibleCount = (gameState.opponent?.field || []).filter(c => c && !c.isFlipped).length;
+              const canGkAttack = card.pos === 'GK' ? (visibleCount === 1 || opponentVisibleCount === 0) : true;
+              if (canGkAttack) {
+                actions.push({ type: 'ATTACK', label: t('game.attack') || 'ATTAQUER', icon: <MdArrowUpward /> });
+              }
           }
       }
-      
-      // Actions Phase ATTACK_DECLARED (Défense)
-      else if (zone === 'field' && phase === 'ATTACK_DECLARED' && turn === 'player' && !card.isFlipped) {
-          actions.push({ type: 'BLOCK', label: t('game.block') || 'BLOQUER', icon: <MdShield /> });
-      }
-      else if (zone === 'hand' && phase === 'ATTACK_DECLARED' && turn === 'player') {
-          // CONDITION : Seulement si la carte possède le mot-clé BOOST
-          const isBoostCard = card.effects?.some(eff => eff === 'BOOST1' || eff === 'BOOST2');
-          if (isBoostCard) {
-              actions.push({ type: 'BOOST', label: t('game.boost') || 'BOOST', icon: <MdFlashOn /> });
+      else if (phase === 'ATTACK_DECLARED' && turn === 'player') {
+          if (zone === 'field' && !card.isFlipped) {
+              actions.push({ type: 'BLOCK', label: t('game.block') || 'BLOQUER', icon: <MdShield /> });
+          } else if (zone === 'hand') {
+              const isBoostCard = card.effects?.some(eff => eff === 'BOOST1' || eff === 'BOOST2');
+              if (isBoostCard) {
+                  actions.push({ type: 'BOOST', label: t('game.boost') || 'BOOST', icon: <MdFlashOn /> });
+              }
           }
       }
       
@@ -97,7 +97,7 @@ export const useGameInteraction = (
   const onDragStart = (event: React.DragEvent, card: Player, cardIndex: number) => {
     if (!gameState || gameState.winner || gameState.turn !== 'player' || gameState.phase !== 'MAIN') return;
     
-    if (gameState.player.field.length >= 5) { // Utilisation d'une constante brute ou GAME_RULES si dispo
+    if (gameState.player.field.length >= 5) {
         event.preventDefault();
         return;
     }

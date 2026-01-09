@@ -12,9 +12,8 @@ interface TeamSelectionProps {
 
 const TeamSelectionScreen: React.FC<TeamSelectionProps> = ({ onBack }) => {
   const { t } = useLanguage();
-  const { initMatch } = useGameStore();
+  const { initMatch, quitMatch, gameState } = useGameStore();
   
-  // Only keep the first 12 national teams and sort them alphabetically
   const teams = useMemo(() => {
     return NATIONAL_TEAMS.slice(0, 12).sort((a, b) => {
         const nameA = t(`teams.${a.id}`).toLowerCase();
@@ -23,11 +22,15 @@ const TeamSelectionScreen: React.FC<TeamSelectionProps> = ({ onBack }) => {
     });
   }, [t]);
   
-  // Default selections
   const [playerChoice, setPlayerChoice] = useState(teams[0].id);
   const [opponentChoice, setOpponentChoice] = useState(teams[1].id);
 
   const handleStart = () => {
+    // RÈGLE : Si un match est déjà en cours, on l'archive dans les sauvegardes avant d'en créer un nouveau
+    if (gameState) {
+        quitMatch(true); 
+    }
+
     let playerDeck: Player[] = [];
     let opponentDeck: Player[] = [];
     let pName = "";
@@ -81,7 +84,6 @@ const TeamSelectionScreen: React.FC<TeamSelectionProps> = ({ onBack }) => {
       variants={containerVariants}
       className="w-full h-full bg-[#080808] text-white flex flex-col items-center overflow-hidden relative"
     >
-      {/* Header (Plus compact) */}
       <div className="w-full max-w-2xl flex justify-between items-center px-6 py-6 z-10 shrink-0">
         <div className="flex flex-col">
             <h1 className="text-2xl font-black uppercase tracking-tighter text-white flex items-center gap-2">
@@ -95,10 +97,7 @@ const TeamSelectionScreen: React.FC<TeamSelectionProps> = ({ onBack }) => {
         </button>
       </div>
 
-      {/* Contenu principal (Scrollable) */}
       <div className="flex-1 w-full max-w-2xl flex flex-col gap-6 overflow-y-auto px-6 custom-scrollbar pb-40 pt-2">
-        
-        {/* --- SECTION ADVERSAIRE (EN HAUT) --- */}
         <motion.div variants={itemVariants} className="flex flex-col">
             <div className="flex items-center justify-between mb-4 px-2">
                 <h2 className="text-red-500 font-black uppercase tracking-widest text-xs flex items-center gap-2">
@@ -132,7 +131,6 @@ const TeamSelectionScreen: React.FC<TeamSelectionProps> = ({ onBack }) => {
             <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white to-transparent"></div>
         </div>
 
-        {/* --- SECTION JOUEUR (EN BAS) --- */}
         <motion.div variants={itemVariants} className="flex flex-col">
             <div className="flex items-center justify-between mb-4 px-2">
                 <h2 className="text-[#afff34] font-black uppercase tracking-widest text-xs flex items-center gap-2">
@@ -161,21 +159,22 @@ const TeamSelectionScreen: React.FC<TeamSelectionProps> = ({ onBack }) => {
         </motion.div>
       </div>
 
-      {/* Footer avec bouton Kick Off (Fixé en bas) */}
-      <motion.div 
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black via-black/95 to-transparent z-50 flex justify-center shrink-0"
-      >
+      {/* Footer - Ajout de pointer-events-auto et z-index élevé pour garantir l'interaction */}
+      <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black via-black/95 to-transparent z-[100] flex justify-center pointer-events-none">
           <motion.button 
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="w-full max-w-lg bg-[#afff34] text-black text-xl font-black uppercase tracking-tighter py-4 rounded-xl shadow-[0_10px_40px_rgba(175,255,52,0.4)] transition-all flex items-center justify-center gap-3 border-4 border-black group" 
-            onClick={handleStart}
+            className="w-full max-w-lg bg-[#afff34] text-black text-xl font-black uppercase tracking-tighter py-4 rounded-xl shadow-[0_10px_40px_rgba(175,255,52,0.4)] transition-all flex items-center justify-center gap-3 border-4 border-black group pointer-events-auto" 
+            onClick={(e) => {
+                e.stopPropagation();
+                handleStart();
+            }}
           >
             {t('selection.kickoff')} ➜
           </motion.button>
-      </motion.div>
+      </div>
     </motion.div>
   );
 };

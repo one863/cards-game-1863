@@ -6,18 +6,19 @@ import { useLanguage } from '@/app/LanguageContext';
 import { getEffectValue, calculateTotalPowerBonus } from '@/core/engine/effectSystem';
 import useAI from '@/core/ai/useAI';
 import { Player } from '@/types';
+import { THEME } from '@/styles/theme';
+import { useImagePreloader } from '@/hooks/useImagePreloader';
 import { 
-    MdMic, MdReplay, MdShield
+    MdMic
 } from 'react-icons/md';
 
 import { 
     GameHUD, GameField, GameHand, 
-    LogsModal, StatsModal, InspectionModal, PauseModal, MatchResultModal, VisualEffectsLayer, LogMessage 
-} from './components';
-import DiscardPileModal from './components/DiscardPileModal';
-import DeckPileModal from './components/DeckPileModal';
+    LogsModal, StatsModal, InspectionModal, PauseModal, MatchResultModal, VisualEffectsLayer, LogMessage,
+    DiscardPileModal, DeckPileModal
+} from '@/features/game/components';
 
-import { useGameInteraction } from './useGameInteraction';
+import { useGameInteraction } from '@/features/game/useGameInteraction';
 
 const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
   const { t } = useLanguage();
@@ -36,6 +37,17 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
   const [showPauseMenu, setShowPauseMenu] = useState(false); 
   const [logsCopied, setLogsCopied] = useState(false);
 
+  // URLs to preload
+  const imageUrls = useMemo(() => {
+    const urls: string[] = [
+        'https://www.transparenttextures.com/patterns/grass.png',
+        'https://www.transparenttextures.com/patterns/carbon-fibre.png'
+    ];
+    return urls;
+  }, []);
+
+  const isImagesLoaded = useImagePreloader(imageUrls);
+
   const { inspectedCard, setInspectedCard, onCardClick, inspectionActions, executeAction, onDragStart, onDropCard } = useGameInteraction(
       gameState, selectedBoostId, setSelectedBoostId, handlePlayCard, handleAttack, handleBlock
   );
@@ -43,8 +55,6 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
   useAI();
 
   const isPlayerTurn = gameState?.turn === 'player';
-  const mustBlock = gameState?.phase === 'ATTACK_DECLARED' && gameState?.turn === 'player';
-  const attackerCard = mustBlock ? gameState?.opponent.field.find(c => c.instanceId === gameState.attackerInstanceId) : null;
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -56,27 +66,56 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
 
   const copyLogs = useCallback(async () => {
     if (!gameState?.log) return;
-    const text = gameState.log.map(l => t(l.key, l.params)).join('\n');
-    let timer: ReturnType<typeof setTimeout>;
-    const success = () => { 
-      setLogsCopied(true); 
-      timer = setTimeout(() => setLogsCopied(false), 2000); 
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        try { await navigator.clipboard.writeText(text); success(); } catch (err) { fallbackCopy(text, success); }
-    } else { fallbackCopy(text, success); }
-    return () => { if (timer) clearTimeout(timer); };
-  }, [gameState?.log, t]);
+    
+    // FORMATAGE HARMONISÉ AVEC LES SAUVEGARDES
+    const reportHeader = `╔═══════════════════════════════════════════╗\n` +
+                         `  ⚽ MATCH REPORT: ${gameState.player.teamName.toUpperCase()} vs ${gameState.opponent.teamName.toUpperCase()}\n` +
+                         `╚═══════════════════════════════════════════╝\n` +
+                         `🏆 Current Score: ${gameState.player.score} - ${gameState.opponent.score}\n` +
+                         `----------------------------------------------\n\n`;
 
-  const fallbackCopy = (text: string, onSuccess: () => void) => {
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.position = "fixed"; textArea.style.left = "-9999px";
-      document.body.appendChild(textArea);
-      textArea.focus(); textArea.select();
-      try { if (document.execCommand('copy')) onSuccess(); } catch (err) {}
-      document.body.removeChild(textArea);
-  };
+    const formattedLogs = gameState.log
+      .map((l: any) => {
+          const translatedParams = { ...l.params };
+          if (l.params) {
+              Object.keys(l.params).forEach(k => {
+                  const val = l.params[k];
+                  if (typeof val === 'string' && val.startsWith('logs.')) {
+                      translatedParams[k] = t(val);
+                  }
+              });
+          }
+          let line = t(l.key, translatedParams);
+          if (l.key.includes('ai_')) line = `[BOT LOG] ${line}`;
+          return line;
+      })
+      .reverse()
+      .join('\n');
+
+    const techData = `\n\n----------------------------------------------\n` +
+                     `📊 ANALYTICS DATA\n` +
+                     `Match ID: ${gameState.id}\n` +
+                     `Remaining Deck (P/O): ${gameState.player.deck.length}/${gameState.opponent.deck.length}\n` +
+                     `----------------------------------------------\n` +
+                     `🏁 End of Report - Generated by 1863 AI Engine ⚽`;
+
+    const finalReport = reportHeader + formattedLogs + techData;
+
+    const textArea = document.createElement("textarea");
+    textArea.value = finalReport;
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    try {
+      if (document.execCommand('copy')) {
+          setLogsCopied(true); 
+          setTimeout(() => setLogsCopied(false), 2000); 
+      }
+    } catch (err) {
+      console.error('Failed to copy logs', err);
+    }
+    document.body.removeChild(textArea);
+  }, [gameState, t]);
 
   const handleRestart = () => {
       if (!gameState) return;
@@ -112,15 +151,28 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
     if (!gameState?.log || gameState.log.length === 0) return null;
     const lastLog = gameState.log[0];
     const isTurnPlayer = gameState.turn === 'player';
-    const turnColor = isTurnPlayer ? 'border-[#afff34]/40' : 'border-red-500/40';
+    const activeColor = isTurnPlayer ? THEME.colors.player : THEME.colors.opponent;
+    const bgColor = isTurnPlayer ? 'rgba(175, 255, 52, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+    
     return (
-        <motion.div key={lastLog.id} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} className={`bg-black/90 px-4 py-1.5 rounded-lg border ${turnColor} backdrop-blur-md text-center flex items-center gap-2 max-w-full relative overflow-hidden shadow-2xl`}>
-            <MdMic className={isTurnPlayer ? 'text-[#afff34] animate-pulse' : 'text-red-500 animate-pulse'} size={16} />
-            <div className="flex flex-col items-center flex-1">
-                <div className="flex items-center gap-1">
-                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] ${isTurnPlayer ? 'text-[#afff34]' : 'text-red-500'}`}>{t('game.live')} • {isTurnPlayer ? t('selection.you') : t('selection.opponent')}</span>
+        <motion.div 
+            key={lastLog.id} initial={{ y: 20, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -20, opacity: 0, scale: 0.95 }} 
+            className="mx-auto w-fit max-w-[90%] flex items-center gap-3 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.5)] relative overflow-hidden group"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)', borderLeft: `4px solid ${activeColor}`, boxShadow: `inset 0 0 20px ${bgColor}` }}
+        >
+            <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundColor: activeColor }} />
+            <div className="flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-black/50 border border-white/5" style={{ color: activeColor }}>
+                    <MdMic size={18} className="animate-pulse" />
                 </div>
-                <div className="text-[10px] md:text-xs text-white font-medium leading-tight">
+            </div>
+            <div className="flex flex-col">
+                <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em]" style={{ color: activeColor }}>{t('game.live')}</span>
+                    <span className="w-1 h-1 rounded-full bg-white/20" />
+                    <span className="text-[9px] font-bold text-white/50 uppercase">{isTurnPlayer ? t('selection.you') : t('selection.opponent')}</span>
+                </div>
+                <div className="text-xs md:text-sm text-white font-semibold leading-snug tracking-tight">
                     <LogMessage logKey={lastLog.key} params={lastLog.params} />
                 </div>
             </div>
@@ -128,93 +180,53 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
     );
   }, [gameState?.log, gameState?.turn, t]);
 
-  if (!gameState || !gameState.player || !gameState.opponent) return <div className="flex h-full items-center justify-center bg-black text-white">Loading...</div>;
+  if (!gameState || !gameState.player || !gameState.opponent || !isImagesLoaded) {
+    return (
+        <div className="flex h-full flex-col items-center justify-center bg-[#0c0c0c] text-white">
+            <div className="w-12 h-12 border-4 border-[#afff34]/20 border-t-[#afff34] rounded-full animate-spin mb-4"></div>
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">{t('game.loading') || 'LOADING STADIUM...'}</span>
+        </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full bg-[#0c0c0c] overflow-hidden flex flex-col font-sans text-white">
       <VisualEffectsLayer onResumeGame={resumeGame} />
       
-      {mustBlock && (
-        <motion.div initial={{ y: -100 }} animate={{ y: 0 }} className="absolute top-20 left-0 right-0 z-[100] bg-red-600 text-white py-1 text-center font-black uppercase tracking-widest shadow-2xl flex flex-col items-center justify-center border-b border-white/20">
-           <div className="flex items-center gap-2">
-              <MdShield size={16} className="animate-pulse" />
-              <span className="text-[10px]">{t('game.must_block')}</span>
-           </div>
-        </motion.div>
-      )}
-
-      {/* Main game area using grid for 6 rows */}
       <div className="flex-1 relative grid grid-rows-6 gap-1 w-full max-w-[450px] mx-auto pb-2">
-        
-        {/* Fond du terrain avec couleur claire */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#4CAF50] via-[#81C784] to-[#4CAF50] z-0 opacity-50">
+        <div className="absolute inset-0 z-0 opacity-50" style={{ background: `linear-gradient(to bottom, ${THEME.colors.grass.from}, ${THEME.colors.grass.via}, ${THEME.colors.grass.to})` }}>
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/grass.png')] opacity-20 contrast-125"></div>
         </div>
-
-        {/* Rond central du terrain (séparé des commentaires) */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-white/10 rounded-full z-0"></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/30 rounded-full z-0"></div>
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-white/10 z-0"></div>
 
-        {/* LIGNE 1 : HUD (Scoreboard) - Alignement central */}
         <div className="relative z-10 flex items-center justify-center pt-4">
             <GameHUD onMenuClick={() => setShowPauseMenu(true)} />
         </div>
 
-        {/* LIGNE 2 : MAIN ADVERSAIRE */}
         <div className="relative z-10 flex items-center justify-center">
-            <GameHand 
-                hand={gameState.opponent.hand} sideKey="opponent" selectedBoostId={null} 
-                deckCount={gameState.opponent.deck.length} discardCount={gameState.opponent.discard.length}
-                onCardClick={onCardClick} 
-            />
+            <GameHand hand={gameState.opponent.hand} sideKey="opponent" selectedBoostId={null} deckCount={gameState.opponent.deck.length} discardCount={gameState.opponent.discard.length} onCardClick={onCardClick} />
         </div>
 
-        {/* LIGNE 3 : TERRAIN ADVERSAIRE */}
         <div className="relative z-10 flex items-center justify-center">
             <GameField field={gameState.opponent.field} sideKey="opponent" attackerInstanceId={gameState.attackerInstanceId || null} selectedAttackerId={selectedAttackerId} turn={gameState.turn} phase={gameState.phase} getVisualBonus={getVisualBonus} onCardClick={onCardClick} onDropCard={onDropCard} />
         </div>
             
-        {/* LIGNE 4 : TERRAIN JOUEUR */}
         <div className="relative z-10 flex items-center justify-center">
             <GameField field={gameState.player.field} sideKey="player" attackerInstanceId={gameState.attackerInstanceId || null} selectedAttackerId={selectedAttackerId} turn={gameState.turn} phase={gameState.phase} isMeneurActive={gameState.meneurActive} getVisualBonus={getVisualBonus} onCardClick={onCardClick} onDropCard={onDropCard} />
         </div>
         
-        {/* LIGNE 5 : MAIN JOUEUR */}
         <div className="relative z-10 flex items-center justify-center">
-            <GameHand 
-                hand={gameState.player.hand} sideKey="player" selectedBoostId={selectedBoostId} 
-                deckCount={gameState.player.deck.length} discardCount={gameState.player.discard.length}
-                onCardClick={onCardClick} onDragStart={onDragStart}
-                onDeckClick={() => setDeckOpen(true)} onDiscardClick={() => setDiscardOpen(true)}
-            />
+            <GameHand hand={gameState.player.hand} sideKey="player" selectedBoostId={selectedBoostId} deckCount={gameState.player.deck.length} discardCount={gameState.player.discard.length} onCardClick={onCardClick} onDragStart={onDragStart} onDeckClick={() => setDeckOpen(true)} onDiscardClick={() => setDiscardOpen(true)} />
         </div>
 
-        {/* LIGNE 6 : COMMENTAIRES LIVE */}
-        <div className="relative z-20 flex items-center justify-center h-full"> {/* Increased height and centered content */}
-             <div className="scale-100 w-full">
+        <div className="relative z-20 flex items-center justify-center h-full">
+             <div className="scale-100 w-full flex justify-center">
                 <AnimatePresence mode="wait">{commentaryBox}</AnimatePresence>
              </div>
         </div>
-
       </div>
-
-      {/* Barre d'action joueur */}
-      <AnimatePresence>
-        {isPlayerTurn && (gameState.meneurActive || gameState.stoppageTimeAction === 'player' || gameState.phase === 'ATTACK_DECLARED') && (
-            <motion.div 
-                initial={{ y: 50, opacity: 0 }} 
-                animate={{ y: 0, opacity: 1 }} 
-                exit={{ y: 50, opacity: 0 }}
-                className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[60]"
-            >
-                <button onClick={() => handlePass('player')} className="bg-black/90 backdrop-blur-md text-[#afff34] px-4 py-1.5 rounded-full border border-[#afff34]/30 shadow-2xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest active:scale-95 transition-transform">
-                    {gameState.phase === 'ATTACK_DECLARED' ? t('game.pass') : t('game.skip_meneur')} 
-                    <MdReplay size={14} className="rotate-90" />
-                </button>
-            </motion.div>
-        )}
-      </AnimatePresence>
       
       <DiscardPileModal /> 
       <DeckPileModal />
@@ -223,27 +235,23 @@ const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
           {showLogModal && <LogsModal key="logs-modal" isOpen={showLogModal} onClose={() => setShowLogModal(false)} logs={gameState.log} copyLogs={copyLogs} logsCopied={logsCopied} />}
           {showStatsModal && <StatsModal key="stats-modal" isOpen={showStatsModal} onClose={() => setShowStatsModal(false)} player={gameState.player} opponent={gameState.opponent} goals={gameState.goals} />}
           {showPauseMenu && (
-              <PauseModal 
-                key="pause-modal" isOpen={showPauseMenu} 
-                onResume={() => setShowPauseMenu(false)} 
-                onRestart={handleRestart}
-                onQuit={onQuit} 
-                onShowLogs={() => { setShowPauseMenu(false); setShowLogModal(true); }}
-                onShowStats={() => { setShowPauseMenu(false); setShowStatsModal(true); }}
-              />
+              <PauseModal key="pause-modal" isOpen={showPauseMenu} onResume={() => setShowPauseMenu(false)} onRestart={handleRestart} onQuit={onQuit} onShowLogs={() => { setShowPauseMenu(false); setShowLogModal(true); }} onShowStats={() => { setShowPauseMenu(false); setShowStatsModal(true); }} />
           )}
           {inspectedCard && (
-              <InspectionModal 
-                key="inspect-modal" 
-                card={inspectedCard.card} 
-                side={inspectedCard.side} 
-                onClose={() => setInspectedCard(null)} 
-                actions={inspectionActions} 
-                onAction={executeAction} 
-              />
+              <InspectionModal key="inspect-modal" card={inspectedCard.card} side={inspectedCard.side} onClose={() => setInspectedCard(null)} actions={inspectionActions} onAction={executeAction} />
           )}
           {showResultOverlay && gameState.winner && (
-              <MatchResultModal key="result-modal" winner={gameState.winner} playerScore={gameState.player.score} opponentScore={gameState.opponent.score} onRematch={handleRestart} onMenu={onQuit} />
+              <MatchResultModal 
+                key="result-modal" 
+                winner={gameState.winner} 
+                playerScore={gameState.player.score} 
+                opponentScore={gameState.opponent.score} 
+                playerTeamName={gameState.player.teamName} 
+                opponentTeamName={gameState.opponent.teamName} 
+                onRematch={handleRestart} 
+                onMenu={onQuit} 
+                onReview={() => setShowResultOverlay(false)} 
+              />
           )}
       </AnimatePresence>
     </div>

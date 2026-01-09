@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUserStore } from '@/stores/useUserStore';
 import { useLanguage } from '@/app/LanguageContext';
 import BOOSTERS from '@/data/boosters.json';
-import PackItem from './components/PackItem';
-import RewardOverlay from './components/RewardOverlay';
+import PackItem from '@/features/shop/components/PackItem';
+import RewardOverlay from '@/features/shop/components/RewardOverlay';
 import { Player } from '@/types';
 import { MdClose, MdAttachMoney } from 'react-icons/md';
 

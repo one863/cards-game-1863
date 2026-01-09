@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Player } from '@/types';
 import MiniCard from './MiniCard';
 import LargeCard from './LargeCard';
+import { THEME } from '@/styles/theme';
 
 interface CardProps {
   data?: Player | null;
@@ -25,7 +26,7 @@ const Card: React.FC<CardProps> = ({
   const statusClasses = useMemo(() => {
     let classes = "";
     if (isAttacking) classes += " border-[#ff9f34] shadow-[0_0_40px_rgba(255,159,52,0.6)]";
-    else if (isSelected) classes += " border-[#afff34] shadow-[0_0_30px_rgba(175,255,52,0.4)]";
+    else if (isSelected) classes += ` border-[${THEME.colors.player}] shadow-[0_0_30px_rgba(175,255,52,0.4)]`;
     else if (canBlock) classes += " border-blue-500 shadow-[0_0_25px_rgba(59,130,246,0.4)]";
     else classes += " border-white/10 shadow-lg";
     

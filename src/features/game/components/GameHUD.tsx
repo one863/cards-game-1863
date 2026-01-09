@@ -2,6 +2,7 @@ import React from 'react';
 import { useGameStore } from '@/stores/useGameStore';
 import { useLanguage } from '@/app/LanguageContext';
 import { MdMenu } from 'react-icons/md';
+import { THEME } from '@/styles/theme';
 
 interface GameHUDProps {
   onMenuClick: () => void;
@@ -18,23 +19,33 @@ const GameHUD: React.FC<GameHUDProps> = ({ onMenuClick }) => {
 
   return (
     <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-50 pointer-events-none">
-      {/* Scoreboard - Centré et Sans Chrono */}
+      {/* Scoreboard - Perfectly Centered Grid */}
       <div className="flex flex-col gap-2 pointer-events-auto mx-auto"> 
-          <div className="bg-black/40 backdrop-blur-3xl border border-white/10 rounded-2xl px-6 py-2 shadow-2xl min-w-[200px]">
-              <div className="flex justify-between items-center w-full">
+          <div className="bg-black/40 backdrop-blur-3xl border border-white/10 rounded-2xl px-6 py-2 shadow-2xl min-w-[240px]">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full gap-0">
                   
                   {/* Joueur */}
-                  <div className="flex flex-col items-center">
-                      <span className="text-[11px] font-black text-white/60 uppercase tracking-widest mb-1">{t(playerTeamName)}</span>
-                      <span className="text-3xl font-black text-[#afff34] leading-none drop-shadow-lg">{playerScore}</span>
+                  <div className="flex flex-col items-center justify-center">
+                      <span className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1 truncate max-w-[70px]">{t(playerTeamName)}</span>
+                      <span 
+                        className="text-3xl font-black leading-none drop-shadow-lg"
+                        style={{ color: THEME.colors.player }}
+                      >
+                        {playerScore}
+                      </span>
                   </div>
 
-                  <div className="h-8 w-px bg-white/10 mx-4"></div>
+                  <div className="h-8 w-px bg-white/10 mx-6"></div>
 
                   {/* Adversaire */}
-                  <div className="flex flex-col items-center">
-                      <span className="text-[11px] font-black text-white/60 uppercase tracking-widest mb-1">{t(opponentTeamName)}</span>
-                      <span className="text-3xl font-black text-red-500 leading-none drop-shadow-lg">{opponentScore}</span>
+                  <div className="flex flex-col items-center justify-center">
+                      <span className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1 truncate max-w-[70px]">{t(opponentTeamName)}</span>
+                      <span 
+                        className="text-3xl font-black leading-none drop-shadow-lg"
+                        style={{ color: THEME.colors.opponent }}
+                      >
+                        {opponentScore}
+                      </span>
                   </div>
 
               </div>

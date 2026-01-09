@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Card from '@/components/card/Card';
 import { Player } from '@/types';
+import { THEME } from '@/styles/theme';
 
 interface GameHandProps {
   hand: Player[];
@@ -20,7 +21,7 @@ const GameHand: React.FC<GameHandProps> = ({
   onCardClick, onDeckClick, onDiscardClick, onDragStart
 }) => {
   const isPlayer = sideKey === 'player';
-  const teamColor = isPlayer ? '#afff34' : '#ef4444';
+  const teamColor = isPlayer ? THEME.colors.player : THEME.colors.opponent;
 
   const InfoSlot = () => (
     <div className="w-full aspect-[3/4] flex flex-col gap-1 justify-center shrink-0">
@@ -53,14 +54,16 @@ const GameHand: React.FC<GameHandProps> = ({
                         <motion.div
                             key={card.instanceId || i}
                             initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
-                            className="relative w-full aspect-[3/4] hover:scale-110 hover:z-50 transition-transform duration-200 shadow-2xl origin-top"
+                            className="relative w-full aspect-[3/4] hover:scale-110 hover:z-50 transition-transform duration-200 shadow-2xl origin-top rounded-xl"
                             draggable={onDragStart ? true : false} onDragStart={onDragStart ? (e) => onDragStart(e, card, i) : undefined}
                         >
-                            <Card data={card} isSelected={selectedBoostId === card.instanceId} onClick={() => onCardClick(card, sideKey, 'hand', i)} teamColor={teamColor} isInHand={true} />
+                            <div className="absolute -inset-[1px] z-10">
+                                <Card data={card} isSelected={selectedBoostId === card.instanceId} onClick={() => onCardClick(card, sideKey, 'hand', i)} teamColor={teamColor} isInHand={true} />
+                            </div>
                         </motion.div>
                     ))}
                     {Array.from({ length: Math.max(0, 4 - hand.length) }).map((_, i) => (
-                        <div key={`e-${i}`} className="w-full aspect-[3/4] bg-black/10 rounded-xl flex items-center justify-center">
+                        <div key={`e-${i}`} className="w-full aspect-[3/4] bg-black/10 rounded-xl border border-white/10 flex items-center justify-center">
                             <div className="w-1 h-1 rounded-full bg-white/10" />
                         </div>
                     ))}
@@ -70,13 +73,15 @@ const GameHand: React.FC<GameHandProps> = ({
                 <>
                     <InfoSlot />
                     {Array.from({ length: Math.max(0, 4 - hand.length) }).map((_, i) => (
-                        <div key={`e-${i}`} className="w-full aspect-[3/4] bg-black/10 rounded-xl flex items-center justify-center">
+                        <div key={`e-${i}`} className="w-full aspect-[3/4] bg-black/10 rounded-xl border border-white/10 flex items-center justify-center">
                             <div className="w-1 h-1 rounded-full bg-white/10" />
                         </div>
                     ))}
                     {hand.map((card, i) => (
-                        <div key={card.instanceId || i} className="relative w-full aspect-[3/4] opacity-50">
-                            <Card isHidden={true} teamColor={teamColor} />
+                        <div key={card.instanceId || i} className="relative w-full aspect-[3/4] rounded-xl">
+                            <div className="absolute -inset-[1px] z-10">
+                                <Card isHidden={true} teamColor={teamColor} />
+                            </div>
                         </div>
                     ))}
                 </>

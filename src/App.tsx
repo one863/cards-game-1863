@@ -13,17 +13,35 @@ import MercatoScreen from '@/features/mercato/MercatoScreen';
 import GameScreen from '@/features/game/GameScreen';
 import ShopScreen from '@/features/shop/ShopScreen';
 import TeamSelectionScreen from '@/features/game/TeamSelectionScreen';
+import SavesScreen from '@/features/saves/SavesScreen';
 
 const App = () => {
   const { t, langCode, setLanguage } = useLanguage();
   const { credits, initStarterPack } = useUserStore();
-  const { gameState, quitMatch } = useGameStore();
+  const { gameState, saveHistory, quitMatch } = useGameStore();
 
-  const [currentView, setCurrentView] = useState('menu');
+  // Initialisation de la vue : si un match est en mémoire, on va direct en 'game'
+  const [currentView, setCurrentView] = useState(() => {
+      const saved = localStorage.getItem('game-storage-v2');
+      if (saved) {
+          try {
+              const parsed = JSON.parse(saved);
+              if (parsed.state && parsed.state.gameState) return 'game';
+          } catch(e) {}
+      }
+      return 'menu';
+  });
 
   useEffect(() => {
     initStarterPack();
   }, [initStarterPack]);
+
+  // Navigation automatique uniquement lors de la création ou du chargement explicite
+  useEffect(() => {
+    if (gameState && (currentView === 'quick_match' || currentView === 'saves')) {
+        setCurrentView('game');
+    }
+  }, [gameState, currentView]);
 
   const pageVariants = {
     initial: { opacity: 0, scale: 0.98 },
@@ -32,10 +50,10 @@ const App = () => {
   };
 
   const renderContent = () => {
-    if (gameState) {
+    if (gameState && currentView === 'game') {
         return (
             <div className="w-full h-full bg-black relative overflow-hidden">
-                <GameScreen onQuit={quitMatch} />
+                <GameScreen onQuit={() => { quitMatch(true); setCurrentView('menu'); }} />
             </div>
         );
     }
@@ -47,6 +65,8 @@ const App = () => {
             return <div className="w-full h-full bg-black relative"><ShopScreen onBack={() => setCurrentView('menu')} /></div>;
         case 'quick_match':
             return <div className="w-full h-full bg-black relative"><TeamSelectionScreen onBack={() => setCurrentView('menu')} /></div>;
+        case 'saves':
+            return <div className="w-full h-full bg-black relative"><SavesScreen onBack={() => setCurrentView('menu')} /></div>;
         case 'menu':
         default:
             return (
@@ -54,14 +74,10 @@ const App = () => {
                     variants={pageVariants} initial="initial" animate="animate" exit="exit"
                     className="flex flex-col h-full w-full items-center justify-center p-8 relative bg-black text-white overflow-hidden"
                 >
-                    {/* Texture de fond premium */}
                     <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] pointer-events-none"></div>
-                    
-                    {/* Halos lumineux Expressive */}
                     <div className="absolute top-[-10%] left-[-10%] w-80 h-80 bg-[#afff34]/10 rounded-full blur-[100px] pointer-events-none"></div>
                     <div className="absolute bottom-[-10%] right-[-10%] w-80 h-80 bg-[#afff34]/5 rounded-full blur-[100px] pointer-events-none"></div>
 
-                    {/* Header - Glassmorphism */}
                     <div className="absolute top-8 left-0 right-0 px-8 flex justify-between items-center z-50">
                         <div className="flex items-center gap-2 bg-white/5 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 shadow-xl">
                             <span className="text-lg">💰</span>
@@ -73,23 +89,12 @@ const App = () => {
                         </div>
                     </div>
 
-                    {/* Logo - Style Expressive */}
-                    <div className="flex flex-col items-center mb-20 relative">
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="relative"
-                        >
+                    <div className="flex flex-col items-center mb-16 relative text-center">
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative">
                             <motion.h1 
-                                animate={{ 
-                                    textShadow: [
-                                        "0 0 20px rgba(175, 255, 52, 0.3)", 
-                                        "0 0 40px rgba(175, 255, 52, 0.6)", 
-                                        "0 0 20px rgba(175, 255, 52, 0.3)"
-                                    ] 
-                                }}
+                                animate={{ textShadow: ["0 0 20px rgba(175, 255, 52, 0.3)", "0 0 40px rgba(175, 255, 52, 0.6)", "0 0 20px rgba(175, 255, 52, 0.3)"] }}
                                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                className="text-[14vh] font-black tracking-[-8px] text-white leading-none italic"
+                                className="text-[12vh] font-black tracking-[-8px] text-white leading-none italic"
                             >
                                 1863
                             </motion.h1>
@@ -98,8 +103,20 @@ const App = () => {
                         <p className="text-[10px] text-[#afff34] uppercase tracking-[6px] font-black mt-2 drop-shadow-glow">{t('menu.title')}</p>
                     </div>
 
-                    {/* Actions - Boutons surélevés */}
                     <div className="flex flex-col w-full gap-4 px-4 max-w-sm relative z-10">
+                        
+                        {gameState && (
+                            <motion.button 
+                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} 
+                                onClick={() => setCurrentView('game')}
+                                className="w-full py-4 text-[#afff34] text-xs font-black uppercase rounded-2xl bg-[#afff34]/10 border border-[#afff34]/30 shadow-xl flex items-center justify-center gap-3"
+                            >
+                                <div className="w-2 h-2 rounded-full bg-[#afff34] animate-ping" />
+                                {t('game.continue') || "RESUME CURRENT MATCH"}
+                            </motion.button>
+                        )}
+
                         <motion.button 
                             whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }} 
                             onClick={() => setCurrentView('quick_match')}
@@ -124,6 +141,15 @@ const App = () => {
                                 {t('menu.shop')}
                             </motion.button>
                         </div>
+
+                        <motion.button 
+                            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} 
+                            onClick={() => setCurrentView('saves')}
+                            className="w-full py-4 bg-white/5 backdrop-blur-lg border border-white/10 text-white/50 font-black uppercase tracking-widest text-[10px] rounded-2xl hover:bg-white/10 transition-all shadow-xl flex items-center justify-center gap-2"
+                        >
+                            <MdHistory size={18} />
+                            {t('menu.past_matches')} ({saveHistory.length})
+                        </motion.button>
                     </div>
 
                     <div className="absolute bottom-8 text-white/20 text-[7px] font-black tracking-[4px] uppercase italic">
@@ -146,5 +172,7 @@ const App = () => {
       </div>
   );
 };
+
+import { MdHistory } from 'react-icons/md';
 
 export default App;

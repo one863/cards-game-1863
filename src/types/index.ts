@@ -40,6 +40,7 @@ export interface GoalRecord {
 export type ExceptionalEventType = 'PENALTY' | 'CORNER' | 'FREE_KICK' | null;
 
 export interface GameState {
+  id: string; // Ajout d'un ID unique pour identifier le match
   isFriendly: boolean;
   player: GameSide;
   opponent: GameSide;
@@ -64,7 +65,6 @@ export interface GameState {
     timestamp: number;
   } | null;
   
-  // --- SYSTÈME D'ÉVÉNEMENTS EXCEPTIONNELS ---
   exceptionalEvent?: {
     type: ExceptionalEventType;
     attackerName: string;
@@ -73,7 +73,7 @@ export interface GameState {
     timestamp: number;
   } | null;
 
-  penaltyEvent?: { // Gardé pour compatibilité temporaire si nécessaire, mais on privilégiera exceptionalEvent
+  penaltyEvent?: { 
     active: boolean;
     attackerName: string;
     defenderName: string;

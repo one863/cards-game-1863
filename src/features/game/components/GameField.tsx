@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Card from '@/components/card/Card';
 import { Player } from '@/types';
 import { GAME_RULES } from '@/core/rules/settings';
+import { THEME } from '@/styles/theme';
 
 interface GameFieldProps {
   field: Player[];
@@ -22,7 +23,6 @@ const GameField: React.FC<GameFieldProps> = ({
   getVisualBonus, onCardClick, onDropCard 
 }) => {
   
-  // Rendu d'un slot individuel
   const renderFieldSlot = (i: number) => {
     const card = field[i];
     const isAttacking = attackerInstanceId === card?.instanceId;
@@ -35,25 +35,29 @@ const GameField: React.FC<GameFieldProps> = ({
     return (
         <div 
             key={`slot-${sideKey}-${i}`} 
-            className={`w-full aspect-[3/4] bg-black/30 rounded-xl border border-white/10 flex items-center justify-center relative shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] overflow-visible transition-colors ${isDroppable ? 'hover:border-[#afff34]/50 bg-white/5' : ''}`}
+            className={`w-full aspect-[3/4] rounded-xl relative transition-all duration-300 overflow-hidden ${
+                card 
+                ? 'bg-transparent shadow-none border-none' 
+                : 'bg-black/20 border border-white/5 shadow-[inset_0_0_15px_rgba(0,0,0,0.3)]'
+            } ${isDroppable ? 'hover:border-[#afff34]/30 hover:bg-white/5' : ''}`}
             onDragOver={(e) => { if (isDroppable) e.preventDefault(); }} 
             onDrop={(e) => { if (isDroppable) onDropCard(i); }}
         >
-            {!card && <div className="w-1 h-1 rounded-full bg-white/10" />}
+            {!card && <div className="w-1.5 h-1.5 rounded-full bg-white/5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
             <AnimatePresence>
                 {card && (
                     <motion.div 
                         key={card.instanceId} 
                         initial={{ opacity: 0, scale: 0.9 }} 
-                        animate={{ opacity: 1, scale: 1 }} 
-                        className={`absolute inset-0 z-10 ${canAttackBonus ? 'cursor-pointer ring-4 ring-[#afff34]/50 rounded-xl animate-pulse' : ''}`}
+                        animate={{ opacity: 1, scale: 1.01 }}
+                        className={`absolute inset-0 z-10 ${canAttackBonus ? 'cursor-pointer ring-4 ring-[#afff34]/40 rounded-xl animate-pulse' : ''}`}
                     >
                         <Card 
                             data={card} isMomentum={card.isFlipped} 
                             isAttacking={isAttacking} isSelected={isSelected} canBlock={canBlock}
                             hasActed={card.hasActed} bonus={getVisualBonus(card, sideKey)} 
                             onClick={() => onCardClick(card, sideKey, 'field', i)}
-                            teamColor={sideKey === 'player' ? '#afff34' : '#ef4444'} 
+                            teamColor={sideKey === 'player' ? THEME.colors.player : THEME.colors.opponent} 
                         />
                     </motion.div>
                 )}
@@ -63,7 +67,6 @@ const GameField: React.FC<GameFieldProps> = ({
   };
 
   return (
-    // GRILLE EXACTE DE 5 COLONNES
     <div className="grid grid-cols-5 gap-2 w-full max-w-[450px] px-4 mx-auto">
         {Array.from({ length: 5 }).map((_, i) => renderFieldSlot(i))}
     </div>

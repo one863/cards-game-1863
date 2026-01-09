@@ -26,9 +26,6 @@ const CAM_TARGET_POSITIONS: Position[] = ['LW', 'RW', 'ST'];
 export const CARD_EFFECTS: Record<string, EffectDefinition> = {
   "AGRESSIF": {
     onDuelResolve: ({ gameState, card, ownerSide, addLog }, result, opponentCard) => {
-      // CORRECTION : Si c'est un BUT (resolveGoal sera appelé), on n'active pas l'effet Agressif
-      // car le buteur est déjà défaussé par la logique de but.
-      // On vérifie si un but est en cours (goalEvent) ou si c'est une victoire offensive classique
       if (result === 'LOSE' && gameState && !gameState.goalEvent) {
         const oppSideKey = ownerSide === 'player' ? 'opponent' : 'player';
         const oppSide = gameState[oppSideKey];
@@ -44,11 +41,12 @@ export const CARD_EFFECTS: Record<string, EffectDefinition> = {
       }
     }
   },
-  "POSSESSION": { getPowerBonus: () => 0 }, // Nouveau mot-clé avec effet passif (compteur d'étoiles)
+  "POSSESSION": { getPowerBonus: () => 0 },
   "BOOST1": { value: 1, getPowerBonus: () => 0 },
   "BOOST2": { value: 2, getPowerBonus: () => 0 },
   
-  "GK": createPoste('defender', 2, 'GK'),
+  // MISE À JOUR : Gardien (GK) donne désormais +1 DEF au lieu de +2
+  "GK": createPoste('defender', 1, 'GK'),
   
   "ST": {
     getPowerBonus: (context, side) => {

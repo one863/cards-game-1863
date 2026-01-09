@@ -4,43 +4,56 @@ import { evaluateAttackActions } from './actions/AttackAction';
 import { evaluatePlayActions } from './actions/PlayAction';
 import { evaluateCardWeight } from './scorers/cardScorer'; 
 
-export const getAIDecision = (gameState: GameState, isMeneur: boolean = false) => {
+export const getAIDecision = (gameState: GameState) => {
   try {
       const ai = gameState.opponent;
+      const player = gameState.player;
       const handCount = ai.hand.length;
       const activeAttackers = ai.field.filter(c => !c.isFlipped && !c.hasActed);
       const isFieldFull = ai.field.length >= GAME_RULES.FIELD_SIZE;
+      const flippedCount = ai.field.filter(c => c.isFlipped).length;
 
-      // 0. CHECK RESSOURCES ÉPUISÉES (Seul cas légal de PASS)
+      // 0. CHECK RESSOURCES ÉPUISÉES
       if (handCount === 0 && activeAttackers.length === 0) {
           return { action: 'PASS', reason: "Ressources épuisées (Auto-Pass)" };
       }
 
-      // 1. ÉVALUATION DES ACTIONS
+      // 1. ANALYSE DU CONTEXTE ADVERSE (Stoppage Time / All-In)
+      const isOpponentEmpty = player.hand.length === 0 && player.deck.length === 0;
+
+      // 2. ÉVALUATION DES ACTIONS
       const attackAction = evaluateAttackActions(gameState);
       const playAction = evaluatePlayActions(gameState);
 
-      console.log(`AI Brain: Attack=${attackAction.score} (${attackAction.details?.reason}), Play=${playAction.score}`);
-
-      // 2. CAS CRITIQUE : TERRAIN PLEIN + BESOIN DE JOUER
-      // Si le terrain est plein et qu'on a une carte en main qui "veut" absolument être jouée (score élevé)
-      // On force une attaque de sacrifice pour libérer un slot.
-      if (isFieldFull && handCount > 0 && activeAttackers.length > 0) {
-          // Si PlayAction a un score très élevé (ex: survie momentum ou réponse à un ST)
-          // OU si aucune attaque n'est jugée "viable" par l'algorithme d'efficacité
-          if (playAction.score > 100 || attackAction.score <= 0) {
-              const weakest = activeAttackers.reduce((prev, curr) => 
-                  evaluateCardWeight(prev, gameState) < evaluateCardWeight(curr, gameState) ? prev : curr
-              );
-              return { 
-                  action: 'ATTACK', 
-                  id: weakest.instanceId, 
-                  reason: "Substitution stratégique (Libération de slot pour défense/renfort)" 
-              };
-          }
+      // 3. PRIORITÉ MOMENTUM CRITIQUE (Point 3)
+      // Si l'IA a 2 cartes retournées, elle DOIT privilégier une action qui permet de "nettoyer" le terrain.
+      // Dans le jeu, le nettoyage se fait en gagnant un duel défensif ou en marquant un but.
+      // Si une attaque a de bonnes chances de réussir (score > 80), on fonce pour marquer et tout nettoyer.
+      if (flippedCount >= 2 && attackAction.score > 80) {
+          return { action: 'ATTACK', id: attackAction.details?.id, reason: "Urgence Momentum : Tentative de but pour nettoyer le terrain" };
       }
 
-      // 3. CHOIX DE LA MEILLEURE ACTION STANDARD
+      // 4. STOPPAGE TIME ALL-IN (Point 5)
+      // Si l'adversaire est à sec, l'IA lance toutes ses forces dans la bataille.
+      if (isOpponentEmpty && activeAttackers.length > 0) {
+          // On attaque avec le meilleur attaquant disponible sans hésiter
+          const bestAttacker = activeAttackers.reduce((prev, curr) => 
+              evaluateCardWeight(prev, gameState) > evaluateCardWeight(curr, gameState) ? prev : curr
+          );
+          return { 
+              action: 'ATTACK', 
+              id: bestAttacker.instanceId, 
+              reason: "Offensive finale : L'adversaire n'a plus de ressources" 
+          };
+      }
+
+      // 5. PRUDENCE TACTIQUE (Point 4)
+      // Si PlayAction a un score positif et que l'Attaque est risquée (score faible), on joue plutôt une carte.
+      if (playAction.score > 0 && attackAction.score < 50) {
+          return { action: 'PLAY', idx: playAction.details?.idx, reason: "Prudence tactique : On renforce le terrain plutôt qu'une attaque risquée" };
+      }
+
+      // 6. CHOIX DE LA MEILLEURE ACTION STANDARD
       if (attackAction.score >= playAction.score && attackAction.score > 0) {
           return { action: 'ATTACK', id: attackAction.details?.id, reason: attackAction.details?.reason };
       }
@@ -49,24 +62,19 @@ export const getAIDecision = (gameState: GameState, isMeneur: boolean = false) =
           return { action: 'PLAY', idx: playAction.details?.idx, reason: playAction.details?.reason };
       }
 
-      // 4. GESTION DES CAS DE BLOCAGE (Interdiction de rester immobile si actions possibles)
-      
-      // A. Si on peut jouer (terrain non plein), on le fait.
-      if (!isFieldFull && handCount > 0 && playAction.score > -100) {
+      // 7. GESTION DU BLOCAGE
+      if (!isFieldFull && handCount > 0) {
            return { action: 'PLAY', idx: playAction.details?.idx, reason: "Jeu forcé (Occupation terrain)" };
       }
 
-      // B. Si on doit attaquer (terrain plein ou main vide), on le fait même si risqué.
       if (activeAttackers.length > 0) {
-           // On choisit celui qui a le moins de valeur pour limiter la casse
            const sacrifice = activeAttackers.reduce((prev, curr) => 
               evaluateCardWeight(prev, gameState) < evaluateCardWeight(curr, gameState) ? prev : curr
            );
-           return { action: 'ATTACK', id: sacrifice.instanceId, reason: "Attaque forcée (Rotation nécessaire)" };
+           return { action: 'ATTACK', id: sacrifice.instanceId, reason: "Rotation nécessaire" };
       }
 
-      // D. Si vraiment rien n'est possible, on passe.
-      return { action: 'PASS', reason: "Fin de tour (Aucune action valide restante)" };
+      return { action: 'PASS', reason: "Fin de tour" };
 
   } catch (error) {
       console.error("Erreur Decision IA:", error);
